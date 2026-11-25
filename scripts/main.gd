@@ -11,6 +11,7 @@ const Data = preload("res://scripts/jobs_data.gd")
 const I18n = preload("res://scripts/i18n.gd")
 const Story = preload("res://scripts/story_data.gd")
 const CustomerScene = preload("res://scripts/customer.gd")
+const AudioMgr = preload("res://scripts/audio.gd")
 const Hand = preload("res://scripts/glove_hand.gd")
 const Tools = preload("res://scripts/tools3d.gd")
 const UIcon = preload("res://scripts/ui_icon.gd")
@@ -96,6 +97,8 @@ var dialog_lines: Array = []
 var dialog_btns: Array = []
 var dialog_done := Callable()
 var dialog_prev_mode := "walk"
+var audio: Node
+var step_accum := 0.0
 var active_device := ""
 var focus_job := "laptop"
 var walk_yaw := 0.0
@@ -162,9 +165,17 @@ func T(s: String) -> String:
 	return I18n.t(s)
 
 
+func _sfx(name: String, vol := 1.0) -> void:
+	if audio:
+		audio.play(name, vol)
+
+
 func _ready() -> void:
 	randomize()
 	_load_settings()
+	audio = AudioMgr.new()
+	add_child(audio)
+	audio.set_volumes(float(settings.get("music", 0.6)), float(settings.get("sfx", 0.8)))
 	_load_fonts()
 	room = Room.new()
 	room.build(self)
@@ -551,6 +562,10 @@ func _walk_move(delta: float) -> void:
 			else:
 				p.z = 1.95
 		p.y = EYE_H + sin(Time.get_ticks_msec() * 0.009) * 0.006
+		step_accum += cam.position.distance_to(p)
+		if step_accum > 0.62:
+			step_accum = 0.0
+			_sfx("step", 0.5)
 		cam.position = p
 
 
@@ -897,6 +912,7 @@ func _advance_step(id: String) -> void:
 func _perform(id: String, act: String, target: String) -> float:
 	var d: Node3D = devices[id]
 	var step := _step_def(id)
+	_act_sound(act)
 	match act:
 		"open_lid":
 			d.set_lid(112, 0.9)
@@ -1038,6 +1054,28 @@ func _perform(id: String, act: String, target: String) -> float:
 	return 0.4
 
 
+func _act_sound(act: String) -> void:
+	match act:
+		"unscrew", "screw_in":
+			_sfx("screw")
+		"remove_cover", "replace_cover", "remove_part", "install_part", "remove_screen", "install_screen", "open_lid", "open_screen", "close_screen", "open_case":
+			_sfx("part", 0.7)
+		"clean_fan", "clean_buttons", "clean":
+			_sfx("spray" if tool == "air" else ("wipe" if tool == "cloth" else "brush"))
+		"blow_port":
+			_sfx("spray")
+		"wipe":
+			_sfx("wipe")
+		"measure":
+			_sfx("beep")
+		"power_on", "pad_ok", "pad_test", "test_ok":
+			get_tree().create_timer(0.3).timeout.connect(func() -> void: _sfx("power_on"))
+		"power_dead", "power_hot", "power_nodisk", "power_lowbat", "power_nocharge", "power_glitch", "pad_drift", "pad_stuck", "test_fail":
+			get_tree().create_timer(0.5).timeout.connect(func() -> void: _sfx("power_fail", 0.7))
+		_:
+			_sfx("click", 0.6)
+
+
 func _run_enter(id: String, what: String) -> float:
 	var d: Node3D = devices[id]
 	match what:
@@ -1088,6 +1126,8 @@ func _dust_puff(pos: Vector3) -> void:
 # Hand
 # =============================================================================
 func _equip(id: String) -> void:
+	if id != tool:
+		_sfx("pickup", 0.7)
 	tool = id
 	for tid in hand_tools.keys():
 		(hand_tools[tid] as Node3D).visible = tid == id
@@ -1202,6 +1242,7 @@ func _gain_xp(amount: int) -> void:
 		xp -= 100
 		level += 1
 		_toast(T("Subiste para o nível %d!") % level, false, YELLOW)
+		_sfx("levelup")
 
 
 func _spend(amount: float, what: String) -> void:
@@ -1358,6 +1399,7 @@ func _deliver(id: String, tip: float, stars: int) -> void:
 	var o: Dictionary = jobs[id]["order"]
 	var f := _fault(id)
 	var gain := float(o["pay"]) + tip
+	_sfx("cash")
 	money += gain
 	day_profit += gain
 	repaired += 1
@@ -1473,6 +1515,7 @@ func _spawn_customer(o: Dictionary, purpose: String, story_char := "") -> Node3D
 	customers[oid] = c
 	counter_queue.append(oid)
 	room.open_door()
+	_sfx("door_chime", 0.7)
 	c.walk_path([DOOR_IN, _queue_spot(counter_queue.size() - 1)], func() -> void:
 		c.rotation.y = PI
 		c.look_enabled = true
@@ -1538,6 +1581,7 @@ func _talk_to_customer(c: Node3D) -> void:
 	var purpose := str(c.get_meta("purpose", "order"))
 	var o: Dictionary = c.get_meta("order", {})
 	room.ring_bell()
+	_sfx("bell", 0.7)
 	if purpose == "story":
 		var scene := str(c.get_meta("scene", ""))
 		c.set_bubble("talk")
@@ -1894,6 +1938,8 @@ func _load_settings() -> void:
 		settings["sensitivity"] = float(cfg.get_value("input", "sensitivity", 1.0))
 		settings["fullscreen"] = bool(cfg.get_value("video", "fullscreen", false))
 		settings["lang"] = str(cfg.get_value("ui", "lang", "pt"))
+		settings["music"] = float(cfg.get_value("audio", "music", 0.6))
+		settings["sfx"] = float(cfg.get_value("audio", "sfx", 0.8))
 	I18n.lang = str(settings.get("lang", "pt"))
 
 
@@ -1903,6 +1949,8 @@ func _save_settings() -> void:
 	cfg.set_value("video", "fullscreen", settings["fullscreen"])
 	cfg.set_value("input", "sensitivity", settings["sensitivity"])
 	cfg.set_value("ui", "lang", settings.get("lang", "pt"))
+	cfg.set_value("audio", "music", settings.get("music", 0.6))
+	cfg.set_value("audio", "sfx", settings.get("sfx", 0.8))
 	cfg.save(SETTINGS_PATH)
 
 
@@ -2390,6 +2438,7 @@ func _eur(v: float) -> String:
 
 
 func _toast(text: String, warn := false, color := TEXT) -> void:
+	_sfx("blip_bad" if warn else "pop", 0.6)
 	toast_label.text = text
 	toast_label.add_theme_color_override("font_color", Color("ffb4a8") if warn else color)
 	toast.reset_size()
@@ -2739,12 +2788,14 @@ func _buy_part(key: String) -> void:
 	money -= price
 	day_profit -= price
 	inventory[key] = int(inventory.get(key, 0)) + 1
+	_sfx("cash", 0.5)
 	_toast(T("Comprado: %s (-%s)") % [T(Data.PARTS[key]["name"]), _eur(price)], false, GREEN)
 	_refresh_board()
 
 
 func _small_button(text: String, primary: bool) -> Button:
 	var b := Button.new()
+	b.pressed.connect(func() -> void: _sfx("click"))
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(110, 36)
@@ -2967,6 +3018,7 @@ func _menu_button(text: String, icon_kind: String, primary: bool, action: Callab
 	b.add_theme_stylebox_override("hover", hover)
 	b.add_theme_stylebox_override("pressed", hover)
 	b.add_theme_stylebox_override("disabled", disabled)
+	b.pressed.connect(func() -> void: _sfx("click"))
 	b.pressed.connect(action)
 	var h := HBoxContainer.new()
 	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -3028,6 +3080,19 @@ func _show_menu_panel(which: String) -> void:
 			_save_settings()
 			_rebuild_ui())
 		v.add_child(lang)
+		for vol in [["music", T("Volume da música")], ["sfx", T("Volume dos efeitos")]]:
+			v.add_child(_label(vol[1], 16, MUTED))
+			var vs := HSlider.new()
+			vs.min_value = 0.0
+			vs.max_value = 1.0
+			vs.step = 0.05
+			var key: String = vol[0]
+			vs.value = float(settings.get(key, 0.6 if key == "music" else 0.8))
+			vs.value_changed.connect(func(val: float) -> void:
+				settings[key] = val
+				audio.set_volumes(float(settings.get("music", 0.6)), float(settings.get("sfx", 0.8)))
+				_save_settings())
+			v.add_child(vs)
 		v.add_child(_label(T("Sensibilidade do rato"), 16, MUTED))
 		var s := HSlider.new()
 		s.min_value = 0.3
@@ -3060,6 +3125,7 @@ func _show_menu_panel(which: String) -> void:
 
 func _show_menu() -> void:
 	mode = "menu"
+	audio.play_music("music_menu")
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	menu_root.show()
 	hud.hide()
@@ -3113,6 +3179,7 @@ func _start_game(first: bool) -> void:
 		menu_root.hide()
 		hud.show()
 		mode = "walk"
+		audio.play_music("music_workshop")
 		_reset_walk_camera()
 		_equip("none")
 		crosshair.show()
