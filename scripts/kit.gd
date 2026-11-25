@@ -490,3 +490,59 @@ static func sphere_shape(r: float) -> SphereShape3D:
 	var s := SphereShape3D.new()
 	s.radius = r
 	return s
+
+
+## Lathe-like organic mesh: profile = [Vector3(y, radius_x, radius_z), ...] from bottom to top.
+## Elliptical rings give smooth bodies, limbs and heads. Caps close both ends.
+static func lathe_mesh(profile: Array, segs := 24, z_offset: Array = []) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rings: Array = []
+	var n := profile.size()
+	for i in range(n):
+		var pr: Vector3 = profile[i]
+		var zo: float = z_offset[i] if i < z_offset.size() else 0.0
+		var ring: Array = []
+		for s in range(segs + 1):
+			var a := TAU * float(s) / segs
+			ring.append(Vector3(cos(a) * pr.y, pr.x, sin(a) * pr.z + zo))
+		rings.append(ring)
+	# normals from neighbouring points
+	var normals: Array = []
+	for i in range(n):
+		var row: Array = []
+		for s in range(segs + 1):
+			var p_prev: Vector3 = rings[maxi(i - 1, 0)][s]
+			var p_next: Vector3 = rings[mini(i + 1, n - 1)][s]
+			var p_l: Vector3 = rings[i][(s - 1 + segs) % segs]
+			var p_r: Vector3 = rings[i][(s + 1) % segs]
+			var nrm := (p_r - p_l).cross(p_next - p_prev).normalized()
+			if nrm.length() < 0.5:
+				nrm = Vector3.UP if i == n - 1 else Vector3.DOWN
+			# make sure it points outwards
+			var center := Vector3(0, (profile[i] as Vector3).x, 0)
+			if nrm.dot(rings[i][s] - center) < 0.0:
+				nrm = -nrm
+			row.append(nrm)
+		normals.append(row)
+	for i in range(n - 1):
+		for s in range(segs):
+			var v: Array[Vector3] = [rings[i][s], rings[i][s + 1], rings[i + 1][s + 1], rings[i + 1][s]]
+			var nn: Array[Vector3] = [normals[i][s], normals[i][s + 1], normals[i + 1][s + 1], normals[i + 1][s]]
+			var uv: Array[Vector2] = [Vector2(float(s) / segs, float(i) / n), Vector2(float(s + 1) / segs, float(i) / n), Vector2(float(s + 1) / segs, float(i + 1) / n), Vector2(float(s) / segs, float(i + 1) / n)]
+			_quad(st, v, nn, uv)
+	# caps
+	for cap in [0, n - 1]:
+		var pr: Vector3 = profile[cap]
+		if pr.y < 0.0005 and pr.z < 0.0005:
+			continue
+		var c := Vector3(0, pr.x, (z_offset[cap] if cap < z_offset.size() else 0.0))
+		var nrm := Vector3.DOWN if cap == 0 else Vector3.UP
+		for s in range(segs):
+			_tri(st, c, rings[cap][s], rings[cap][s + 1], nrm, nrm, nrm, Vector3.ONE, false)
+
+	return st.commit()
+
+
+static func lathe(parent: Node, profile: Array, material: Material, pos := Vector3.ZERO, rot_deg := Vector3.ZERO, segs := 24, z_offset: Array = []) -> MeshInstance3D:
+	return mi(parent, lathe_mesh(profile, segs, z_offset), material, pos, rot_deg)
