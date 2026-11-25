@@ -30,6 +30,8 @@ var lid_angle := 0.0
 var _boot_screen: Control
 var _desk_screen: Control
 var _dead_screen: Control
+var _msg_screen: Control
+var _msg_label: Label
 
 var y_top := -H * 0.5 + TB        # top of the base (deck)
 var y_bot := -H * 0.5             # bottom of the cover
@@ -223,25 +225,37 @@ func _build_interior() -> void:
 	ram.name = "RAM"
 	for i in range(4):
 		Kit.box(body, Vector3(0.010, 0.0005, 0.008), chip, Vector3(0.078 + i * 0.015, yi - 0.0024, -0.068))
-	var ssd := Kit.slab(body, Vector3(0.080, 0.0012, 0.022), 0.001, 0.0002, Kit.plastic(Color("0f1012"), 0.4), null, Kit.plastic(Color("0f1012"), 0.4), Vector3(-0.01, yi - 0.0018, -0.085))
-	ssd.name = "SSD"
-	label3d(body, "NVMe 512GB", 28, 0.00011, Color("d8dde2"), Vector3(-0.01, yi - 0.0025, -0.085), Vector3(90, 180, 0))
-	# fan + heatpipe
+	var ssd_node := Node3D.new()
+	ssd_node.name = "SSDModule"
+	ssd_node.position = Vector3(-0.01, yi, -0.085)
+	body.add_child(ssd_node)
+	Kit.slab(ssd_node, Vector3(0.080, 0.0012, 0.022), 0.001, 0.0002, Kit.plastic(Color("0f1012"), 0.4), null, Kit.plastic(Color("0f1012"), 0.4), Vector3(0, -0.0018, 0))
+	Kit.slab(ssd_node, Vector3(0.05, 0.0002, 0.016), 0.001, 0.0001, Kit.plastic(Color("d9dde1"), 0.5), null, Kit.plastic(Color("d9dde1"), 0.5), Vector3(0.008, -0.0025, 0))
+	label3d(ssd_node, "NVMe 512GB", 28, 0.0001, Color("1d2227"), Vector3(0.008, -0.0027, 0), Vector3(90, 180, 0))
+	Kit.box(ssd_node, Vector3(0.006, 0.0014, 0.02), Kit.mat(Color("c9a640"), 0.3, 0.9), Vector3(0.043, -0.0018, 0))
+	register_part("ssd", ssd_node, Vector3(0.09, 0.008, 0.03), Vector3(0, -0.002, 0))
+	# fan + heatpipe (fan assembly is a replaceable part)
 	var fan_c := Vector3(-0.098, yi, -0.058)
-	Kit.cyl(body, 0.034, 0.0016, Kit.plastic(Color("1a1c1f"), 0.5), fan_c + Vector3(0, -0.0008, 0))
+	var fan_asm := Node3D.new()
+	fan_asm.name = "FanAssembly"
+	fan_asm.position = fan_c
+	body.add_child(fan_asm)
+	Kit.cyl(fan_asm, 0.034, 0.0016, Kit.plastic(Color("1a1c1f"), 0.5), Vector3(0, -0.0008, 0))
 	fan_blades = Node3D.new()
-	fan_blades.position = fan_c + Vector3(0, -0.0018, 0)
-	body.add_child(fan_blades)
+	fan_blades.name = "Blades"
+	fan_blades.position = Vector3(0, -0.0018, 0)
+	fan_asm.add_child(fan_blades)
 	var blade_mat := Kit.plastic(Color("2a2d31"), 0.45)
 	Kit.cyl(fan_blades, 0.011, 0.0012, Kit.plastic(Color("202226"), 0.4), Vector3.ZERO)
 	for i in range(11):
 		Kit.box(fan_blades, Vector3(0.019, 0.0006, 0.004), blade_mat, Vector3(cos(TAU * i / 11.0) * 0.02, 0, sin(TAU * i / 11.0) * 0.02), Vector3(18, -rad_to_deg(TAU * i / 11.0), 0))
-	var fan_ring := Kit.torus(body, 0.031, 0.035, Kit.plastic(Color("17181b"), 0.5), fan_c + Vector3(0, -0.0012, 0))
+	var fan_ring := Kit.torus(fan_asm, 0.031, 0.035, Kit.plastic(Color("17181b"), 0.5), Vector3(0, -0.0012, 0))
 	fan_ring.scale = Vector3(1, 0.4, 1)
+	Kit.slab(fan_asm, Vector3(0.012, 0.0012, 0.012), 0.002, 0.0003, Kit.plastic(Color("17181b"), 0.5), null, null, Vector3(0.036, -0.0008, 0.0))
 	var dust_mat := Kit.fabric(Color("8f877a"), 1.0, 1.0, 90.0)
 	dust_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	dust_mat.albedo_color = Color(0.56, 0.53, 0.48, 0.92)
-	fan_dust = Kit.cyl(body, 0.033, 0.0006, dust_mat, fan_c + Vector3(0, -0.0027, 0))
+	fan_dust = Kit.cyl(fan_asm, 0.033, 0.0006, dust_mat, Vector3(0, -0.0027, 0))
 	fan_dust.name = "Dust"
 	for i in range(14):
 		var a := randf() * TAU
@@ -250,6 +264,7 @@ func _build_interior() -> void:
 		fluff.rotation.y = randf() * TAU
 	Kit.mi(body, Kit.tube_mesh(Kit.bezier(fan_c + Vector3(0.02, -0.0018, -0.025), fan_c + Vector3(0.07, -0.0018, -0.03), Vector3(0.03, yi - 0.0018, -0.07), Vector3(0.055, yi - 0.0018, -0.06), 14), 0.0013, 10), copper)
 	add_target("fan", body, Kit.box_shape(Vector3(0.075, 0.008, 0.075)), fan_c + Vector3(0, -0.002, 0), [fan_dust], 0.036)
+	register_part("laptop_fan", fan_asm, Vector3(0.08, 0.008, 0.075), Vector3(0, -0.002, 0))
 	# battery (old one, swollen-looking label)
 	battery = _battery_model(true)
 	battery.position = Vector3(0, yi, 0.050)
@@ -297,6 +312,16 @@ func _build_screen_viewport() -> SubViewport:
 		bat.add_theme_font_size_override("font_size", 28)
 		bat.add_theme_color_override("font_color", Color("e74c3c"))
 		_dead_screen.add_child(bat)
+		_msg_screen = Control.new()
+		_msg_screen.size = Vector2(640, 400)
+		root.add_child(_msg_screen)
+		_msg_label = Label.new()
+		_msg_label.size = Vector2(640, 400)
+		_msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_msg_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_msg_label.add_theme_font_size_override("font_size", 30)
+		_msg_screen.add_child(_msg_label)
 		_boot_screen = Control.new()
 		_boot_screen.size = Vector2(640, 400)
 		root.add_child(_boot_screen)
@@ -373,6 +398,7 @@ func _set_screen(state: String) -> void:
 	if _boot_screen == null:
 		return
 	_dead_screen.visible = state == "dead"
+	_msg_screen.visible = state == "msg"
 	_boot_screen.visible = state == "boot"
 	_desk_screen.visible = state == "on"
 	var scr := lid_pivot.get_node_or_null("Screen") as Node3D
@@ -412,6 +438,52 @@ func press_power(works: bool) -> void:
 		get_tree().create_timer(1.4).timeout.connect(func() -> void: _set_screen("on"))
 	else:
 		_set_screen("off")
+
+
+func show_message(text: String, color := Color.WHITE, seconds := 2.0) -> void:
+	_msg_label.text = text
+	_msg_label.add_theme_color_override("font_color", color)
+	_set_screen("msg")
+	if seconds > 0.0:
+		get_tree().create_timer(seconds).timeout.connect(func() -> void:
+			if screen_state == "msg":
+				_set_screen("off"))
+
+
+## Boot then fail with a message (overheating, missing disk...).
+func boot_then_fail(text: String, color: Color) -> void:
+	_set_screen("boot")
+	get_tree().create_timer(1.2).timeout.connect(func() -> void: show_message(text, color, 2.2))
+
+
+func set_dirty(on: bool) -> void:
+	dust_level = 1.0 if on else 0.0
+	fan_dust.visible = on
+
+
+func spawn_part(key: String, global_pos: Vector3) -> void:
+	if key == "battery":
+		spawn_new_battery(global_pos)
+	else:
+		super.spawn_part(key, global_pos)
+
+
+func has_new_part(key: String) -> bool:
+	if key == "battery":
+		return new_battery != null and is_instance_valid(new_battery) and new_battery.get_parent() == self
+	return super.has_new_part(key)
+
+
+func remove_part(key: String, aside_global: Vector3) -> Tween:
+	if key == "battery":
+		return remove_battery(aside_global)
+	return super.remove_part(key, aside_global)
+
+
+func install_part(key: String) -> Tween:
+	if key == "battery":
+		return install_new_battery()
+	return super.install_part(key)
 
 
 func show_dead_battery() -> void:

@@ -118,6 +118,90 @@ func make_surface(size: Vector3, pos := Vector3.ZERO) -> void:
 	device_pick.collision_mask = 0
 
 
+# --- swappable parts ------------------------------------------------------------
+var parts: Dictionary = {}     # key -> {node, parent, xform, size, offset, new}
+
+
+func meshes_of(node: Node) -> Array:
+	var out: Array = []
+	if node is MeshInstance3D:
+		out.append(node)
+	for c in node.get_children():
+		out.append_array(meshes_of(c))
+	return out
+
+
+## Registers a replaceable part. Its click target is `key`; the spare one is `new_<key>`.
+func register_part(key: String, node: Node3D, size: Vector3, offset := Vector3.ZERO) -> void:
+	parts[key] = {"node": node, "parent": node.get_parent(), "xform": node.transform, "size": size, "offset": offset, "new": null}
+	add_target(key, node, Kit.box_shape(size), offset, meshes_of(node), 0.0)
+
+
+func has_new_part(key: String) -> bool:
+	return parts.has(key) and parts[key]["new"] != null
+
+
+func remove_part(key: String, aside_global: Vector3) -> Tween:
+	var node: Node3D = parts[key]["node"]
+	var t := tw()
+	t.tween_property(node, "global_position", node.global_position + Vector3.UP * 0.025, 0.4)
+	t.tween_callback(func() -> void:
+		var gt := node.global_transform
+		node.get_parent().remove_child(node)
+		add_child(node)
+		node.global_transform = gt)
+	t.tween_property(node, "global_position", aside_global, 0.6)
+	t.tween_property(node, "scale", Vector3(0.001, 0.001, 0.001), 0.3)
+	t.tween_callback(func() -> void: node.visible = false)
+	return t
+
+
+## Puts a brand-new copy of the part on the mat (inventory is handled by the game).
+func spawn_part(key: String, global_pos: Vector3) -> void:
+	var info: Dictionary = parts[key]
+	var orig: Node3D = info["node"]
+	var copy := orig.duplicate() as Node3D
+	for c in copy.get_children():
+		if c is StaticBody3D:
+			copy.remove_child(c)
+			c.free()
+	var dust := copy.get_node_or_null("Dust")
+	if dust:
+		dust.visible = false
+	copy.visible = true
+	copy.scale = Vector3.ONE
+	add_child(copy)
+	var home_gt: Transform3D = (info["parent"] as Node3D).global_transform * (info["xform"] as Transform3D)
+	copy.global_transform = Transform3D(home_gt.basis, global_pos)
+	info["new"] = copy
+	add_target("new_" + key, copy, Kit.box_shape(info["size"]), info["offset"], meshes_of(copy), 0.0)
+
+
+func install_part(key: String) -> Tween:
+	var info: Dictionary = parts[key]
+	var copy: Node3D = info["new"]
+	var parent: Node3D = info["parent"]
+	var xf: Transform3D = info["xform"]
+	var t := tw()
+	var home := parent.global_transform * xf
+	t.tween_property(copy, "global_position", home.origin + Vector3.UP * 0.03, 0.55)
+	t.tween_property(copy, "global_position", home.origin, 0.35)
+	t.tween_callback(func() -> void:
+		var gt := copy.global_transform
+		remove_child(copy)
+		parent.add_child(copy)
+		copy.global_transform = gt
+		copy.transform = xf
+		info["node"] = copy
+		info["new"] = null)
+	return t
+
+
+## Optional status message on the device screen (overridden by devices with screens).
+func show_message(_text: String, _color := Color.WHITE, _seconds := 2.0) -> void:
+	pass
+
+
 # --- helpers -----------------------------------------------------------------
 ## Unshaded display surface (texture assigned from a SubViewport in _ready).
 func _screen_material() -> StandardMaterial3D:

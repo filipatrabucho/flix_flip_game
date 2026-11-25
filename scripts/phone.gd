@@ -21,6 +21,8 @@ var cleaned := 0.0
 var screen_state := "off"
 var _lock: Control
 var _glitch: Control
+var _msg_screen: Control
+var _msg_label: Label
 var _crack_mat: StandardMaterial3D
 var y_top := T * 0.5
 var y_frame_top := T * 0.5 - ST
@@ -77,6 +79,7 @@ func _build() -> void:
 		screws.append(s)
 		screw_local.append(p)
 		add_target("pscrew%d" % i, body, Kit.sphere_shape(0.0032), p, [s.get_meta("head_mesh")], 0.0032, Vector3(90, 0, 0))
+	add_target("port", body, Kit.box_shape(Vector3(0.014, 0.006, 0.006)), Vector3(0, -0.0006, L * 0.5 + 0.002), [usb], 0.0035, Vector3(90, 0, 0))
 	# rear camera bump (underneath)
 	var bump_mat := Kit.mat(Color("2a3a50"), 0.3, 0.0)
 	Kit.slab(body, Vector3(0.032, 0.0014, 0.033), 0.008, 0.0006, bump_mat, bump_mat, bump_mat, Vector3(-W * 0.5 + 0.021, -T * 0.5 - 0.0006, -L * 0.5 + 0.022))
@@ -101,9 +104,15 @@ func _build_interior() -> void:
 	var board := Kit.plastic(Color("10241a"), 0.4, 0.2)
 	var shield := Kit.chrome(Color("b5bcc4"))
 	shield.roughness = 0.35
-	var bat := Kit.slab(body, Vector3(0.050, 0.0011, 0.072), 0.003, 0.0004, cell, cell, cell, Vector3(-0.004, yi + 0.00055, 0.018))
+	var pack := Node3D.new()
+	pack.name = "BatteryPack"
+	pack.position = Vector3(-0.004, yi, 0.018)
+	body.add_child(pack)
+	var bat := Kit.slab(pack, Vector3(0.050, 0.0011, 0.072), 0.003, 0.0004, cell, cell, cell, Vector3(0, 0.00055, 0))
 	bat.name = "PhoneBattery"
-	label3d(body, "Li-ion 3.88V  3349mAh", 24, 0.00007, Color("c8cdd2"), Vector3(-0.004, yi + 0.00115, 0.018))
+	label3d(pack, "Li-ion 3.88V  3349mAh", 24, 0.00007, Color("c8cdd2"), Vector3(0, 0.00115, 0))
+	Kit.slab(pack, Vector3(0.008, 0.0006, 0.012), 0.001, 0.0002, Kit.plastic(Color("c27a24"), 0.4), null, null, Vector3(0.024, 0.0003, -0.03))
+	register_part("phone_battery", pack, Vector3(0.052, 0.004, 0.074), Vector3(0, 0.0008, 0))
 	Kit.slab(body, Vector3(0.060, 0.0012, 0.040), 0.004, 0.0004, board, board, board, Vector3(0, yi + 0.0006, -0.045))
 	Kit.slab(body, Vector3(0.036, 0.0013, 0.026), 0.002, 0.0004, shield, shield, shield, Vector3(0.008, yi + 0.0007, -0.046))
 	Kit.cyl(body, 0.0055, 0.0012, Kit.mat(Color("0d0f12"), 0.15, 0.2), Vector3(-0.020, yi + 0.0006, -0.058))
@@ -218,7 +227,7 @@ func _build_screen_viewport() -> SubViewport:
 		var t := Label.new()
 		t.text = "08:00"
 		t.size = Vector2(360, 120)
-		t.position = Vector2(0, 110)
+		t.position = Vector2(0, 120)
 		t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		t.add_theme_font_size_override("font_size", 96)
 		t.add_theme_color_override("font_color", Color.WHITE)
@@ -226,7 +235,7 @@ func _build_screen_viewport() -> SubViewport:
 		var d := Label.new()
 		d.text = "segunda-feira, 1 de março"
 		d.size = Vector2(360, 40)
-		d.position = Vector2(0, 92)
+		d.position = Vector2(0, 84)
 		d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		d.add_theme_font_size_override("font_size", 22)
 		d.add_theme_color_override("font_color", Color(1, 1, 1, 0.85))
@@ -236,6 +245,17 @@ func _build_screen_viewport() -> SubViewport:
 		bar.size = Vector2(120, 6)
 		bar.position = Vector2(120, 712)
 		_lock.add_child(bar)
+		_msg_screen = Control.new()
+		_msg_screen.size = Vector2(360, 740)
+		root.add_child(_msg_screen)
+		_msg_label = Label.new()
+		_msg_label.size = Vector2(320, 740)
+		_msg_label.position = Vector2(20, 0)
+		_msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_msg_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_msg_label.add_theme_font_size_override("font_size", 34)
+		_msg_screen.add_child(_msg_label)
 		_glitch = Control.new()
 		_glitch.size = Vector2(360, 740)
 		root.add_child(_glitch)
@@ -257,6 +277,7 @@ func _set_screen(state: String) -> void:
 		return
 	_lock.visible = state == "on"
 	_glitch.visible = state == "glitch"
+	_msg_screen.visible = state == "msg"
 	for n in [screen_node, new_screen]:
 		if n != null and is_instance_valid(n):
 			var d := n.get_node_or_null("Display") as Node3D
@@ -273,6 +294,29 @@ func press_power(mode: String) -> void:
 	_set_screen(mode)
 	if mode == "glitch":
 		get_tree().create_timer(1.8).timeout.connect(func() -> void: _set_screen("off"))
+
+
+func show_message(text: String, color := Color.WHITE, seconds := 2.0) -> void:
+	_msg_label.text = text
+	_msg_label.add_theme_color_override("font_color", color)
+	_set_screen("msg")
+	if seconds > 0.0:
+		get_tree().create_timer(seconds).timeout.connect(func() -> void:
+			if screen_state == "msg":
+				_set_screen("off"))
+
+
+## For faults other than the cracked screen: hide the cracks, keep the glass clean.
+func set_screen_ok() -> void:
+	crack_mesh.visible = false
+	cleaned = 1.0
+
+
+func press_button_only() -> void:
+	var b: Node3D = body.get_node("PowerButton")
+	var t := tw()
+	t.tween_property(b, "position:x", b.position.x - 0.0005, 0.08)
+	t.tween_property(b, "position:x", b.position.x, 0.12)
 
 
 ## Wipe the screen; returns true when it is fully clean and the cracks are obvious.
@@ -377,3 +421,16 @@ func view_transform(view: String) -> Transform3D:
 		"side":
 			return _view(Vector3(W * 0.5, 0.0, -0.02), Vector3(0.15, 0.08, 0.04))
 	return _view(Vector3.ZERO, Vector3(0, 0.2, 0.2))
+
+
+func spawn_part(key: String, global_pos: Vector3) -> void:
+	if key == "phone_screen":
+		spawn_new_screen(global_pos)
+	else:
+		super.spawn_part(key, global_pos)
+
+
+func has_new_part(key: String) -> bool:
+	if key == "phone_screen":
+		return new_screen != null and is_instance_valid(new_screen) and new_screen.get_parent() == self
+	return super.has_new_part(key)

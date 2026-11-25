@@ -94,20 +94,12 @@ static func air_can() -> Node3D:
 	Kit.cyl(n, 0.026, 0.13, label, Vector3(0, 0.03, 0), Vector3.ZERO, -1.0, 40)
 	Kit.cyl(n, 0.026, 0.012, Kit.chrome(Color("c8ced6")), Vector3(0, 0.101, 0), Vector3.ZERO, 0.021)
 	Kit.cyl(n, 0.026, 0.006, Kit.chrome(Color("c8ced6")), Vector3(0, -0.038, 0), Vector3.ZERO, 0.024)
-	# actuator + nozzle + red straw (points to -Y after tilting)
+	# actuator + nozzle + red straw pointing forward / slightly down (-Z)
 	Kit.cyl(n, 0.011, 0.016, Kit.plastic(Color("eef0f2"), 0.4), Vector3(0, 0.114, 0))
-	Kit.box(n, Vector3(0.010, 0.008, 0.020), Kit.plastic(Color("eef0f2"), 0.4), Vector3(0, 0.124, -0.010))
-	var straw := Kit.tube_mesh(Kit.bezier(Vector3(0, 0.124, -0.02), Vector3(0, 0.124, -0.06), Vector3(0, 0.10, -0.075), Vector3(0, 0.07, -0.08), 12), 0.0018, 8)
+	Kit.box(n, Vector3(0.012, 0.009, 0.022), Kit.plastic(Color("eef0f2"), 0.4), Vector3(0, 0.124, -0.010))
+	var straw := Kit.tube_mesh(Kit.bezier(Vector3(0, 0.124, -0.02), Vector3(0, 0.123, -0.05), Vector3(0, 0.115, -0.075), Vector3(0, 0.104, -0.095), 12), 0.0018, 8)
 	Kit.mi(n, straw, Kit.plastic(Color("d6222a"), 0.4))
-	# held upside-down-ish: rotate so the straw end becomes the tip
-	var holder := Node3D.new()
-	holder.name = "AirCanHolder"
-	for c in n.get_children():
-		n.remove_child(c)
-		holder.add_child(c)
-	holder.rotation_degrees = Vector3(-120, 0, 0)
-	n.add_child(holder)
-	var tip_local := holder.transform * Vector3(0, 0.07, -0.08)
+	var tip_local := Vector3(0, 0.104, -0.095)
 	n.set_meta("tip", tip_local)
 	return n
 
@@ -228,7 +220,7 @@ static func rest_transform(id: String) -> Transform3D:
 		"brush":
 			return Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(20), deg_to_rad(90))), Vector3(0, 0.008, 0))
 		"air":
-			return Transform3D(Basis.from_euler(Vector3(deg_to_rad(120), 0, 0)), Vector3(0, 0.045, 0))
+			return Transform3D(Basis.IDENTITY, Vector3(0, 0.041, 0))
 		"cloth":
 			return Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(15), 0)), Vector3(0, 0.0145, 0))
 		"multimeter":

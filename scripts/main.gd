@@ -6,6 +6,8 @@ const Kit = preload("res://scripts/kit.gd")
 const Room = preload("res://scripts/room.gd")
 const Laptop = preload("res://scripts/laptop.gd")
 const Phone = preload("res://scripts/phone.gd")
+const Gamepad = preload("res://scripts/gamepad.gd")
+const Data = preload("res://scripts/jobs_data.gd")
 const Hand = preload("res://scripts/glove_hand.gd")
 const Tools = preload("res://scripts/tools3d.gd")
 const UIcon = preload("res://scripts/ui_icon.gd")
@@ -13,7 +15,7 @@ const Radial = preload("res://scripts/radial_menu.gd")
 
 const SAVE_PATH := "user://fix_flip_save.json"
 const SETTINGS_PATH := "user://fix_flip_settings.cfg"
-const VERSION := "v0.8"
+const VERSION := "v0.9"
 
 const YELLOW := Color("f5b82e")
 const PANEL_BG := Color(0.035, 0.06, 0.1, 0.84)
@@ -41,44 +43,10 @@ const TOOL_SPOTS := {
 	"multimeter": [Vector3(-0.63, 0.92, -1.14), 16.0],
 }
 
-const JOBS := {
-	"laptop": {
-		"name": "Portátil",
-		"fault": "Bateria",
-		"buy": 60, "part": 35, "sell": 185,
-		"groups": ["Examinar o equipamento", "Identificar avaria", "Remover parafusos", "Substituir bateria", "Fechar e testar"],
-		"steps": [
-			{"g": 0, "text": "Abre a tampa do portátil", "tool": "none", "targets": ["lid"], "view": "overview", "verb": "Abrir", "act": "open_lid"},
-			{"g": 0, "text": "Carrega no botão de ligar", "tool": "none", "targets": ["power"], "view": "front_open", "verb": "Ligar", "act": "power_dead"},
-			{"g": 1, "text": "Mede a tensão na porta USB-C", "tool": "multimeter", "targets": ["port"], "view": "left_side", "verb": "Medir", "act": "measure"},
-			{"g": 2, "text": "Remove os parafusos da tampa inferior", "tool": "screwdriver", "targets": ["screw0", "screw1", "screw2", "screw3"], "need": 4, "view": "bottom", "verb": "Desaparafusar", "act": "unscrew", "enter": "flip_bottom"},
-			{"g": 3, "text": "Retira a tampa inferior", "tool": "none", "targets": ["cover"], "view": "bottom", "verb": "Retirar", "act": "remove_cover"},
-			{"g": 3, "text": "Limpa o pó da ventoinha", "tool": ["brush", "air"], "targets": ["fan"], "need": 3, "view": "interior", "verb": "Limpar", "act": "clean_fan"},
-			{"g": 3, "text": "Retira a bateria avariada", "tool": "none", "targets": ["battery"], "view": "interior", "verb": "Retirar", "act": "remove_battery"},
-			{"g": 3, "text": "Instala a bateria nova (35 €)", "tool": "none", "targets": ["new_battery"], "view": "interior", "verb": "Instalar", "act": "install_battery", "enter": "spawn_battery"},
-			{"g": 4, "text": "Volta a colocar a tampa", "tool": "none", "targets": ["cover"], "view": "interior", "verb": "Colocar", "act": "replace_cover"},
-			{"g": 4, "text": "Aperta os parafusos", "tool": "screwdriver", "targets": ["screw0", "screw1", "screw2", "screw3"], "need": 4, "view": "bottom", "verb": "Aparafusar", "act": "screw_in"},
-			{"g": 4, "text": "Liga o portátil para testar", "tool": "none", "targets": ["power"], "view": "front_open", "verb": "Ligar", "act": "power_on", "enter": "flip_top_open"},
-		],
-	},
-	"phone": {
-		"name": "Telemóvel",
-		"fault": "Ecrã partido",
-		"buy": 90, "part": 45, "sell": 240,
-		"groups": ["Examinar o equipamento", "Identificar avaria", "Remover parafusos", "Substituir ecrã", "Fechar e testar"],
-		"steps": [
-			{"g": 0, "text": "Carrega no botão lateral para ligar", "tool": "none", "targets": ["power"], "view": "front", "verb": "Ligar", "act": "power_glitch"},
-			{"g": 1, "text": "Limpa o ecrã com o pano para ver o dano", "tool": "cloth", "targets": ["screen"], "need": 3, "view": "front", "verb": "Limpar", "act": "wipe"},
-			{"g": 2, "text": "Remove os parafusos pentalobe", "tool": "screwdriver", "targets": ["pscrew0", "pscrew1"], "need": 2, "view": "bottom_edge", "verb": "Desaparafusar", "act": "unscrew"},
-			{"g": 3, "text": "Levanta o ecrã com a ventosa", "tool": "none", "targets": ["screen"], "view": "front", "verb": "Abrir", "act": "open_screen"},
-			{"g": 3, "text": "Retira o ecrã partido", "tool": "none", "targets": ["screen"], "view": "open", "verb": "Retirar", "act": "remove_screen"},
-			{"g": 3, "text": "Instala o ecrã novo (45 €)", "tool": "none", "targets": ["new_screen"], "view": "open", "verb": "Instalar", "act": "install_screen", "enter": "spawn_screen"},
-			{"g": 4, "text": "Fecha o ecrã", "tool": "none", "targets": ["screen"], "view": "open", "verb": "Fechar", "act": "close_screen"},
-			{"g": 4, "text": "Aperta os parafusos", "tool": "screwdriver", "targets": ["pscrew0", "pscrew1"], "need": 2, "view": "bottom_edge", "verb": "Aparafusar", "act": "screw_in"},
-			{"g": 4, "text": "Liga o telemóvel para testar", "tool": "none", "targets": ["power"], "view": "front", "verb": "Ligar", "act": "power_on"},
-		],
-	},
-}
+const GAMEPAD_POS := Vector3(0.33, MAT_Y, -0.99)
+const SLOT_POS := {"laptop": [LAPTOP_POS, 4.0], "phone": [PHONE_POS, -12.0], "gamepad": [GAMEPAD_POS, 8.0]}
+const PART_POS := {"laptop": NEW_BATTERY_POS, "phone": NEW_SCREEN_POS, "gamepad": Vector3(0.50, MAT_Y + 0.0002, -1.02)}
+const COVER_ASIDE_BY := {"laptop": COVER_ASIDE, "gamepad": Vector3(0.10, MAT_Y + 0.0002, -0.99)}
 
 # --- world --------------------------------------------------------------------
 var room: Room
@@ -102,7 +70,13 @@ var level := 1
 var repaired := 0
 var day_profit := 0.0
 var tool := "none"
-var jobs: Dictionary = {}              # id -> {step, progress, diagnosed, done}
+var jobs: Dictionary = {}              # device id -> {order, fault, step, progress, diagnosed, done, used}
+var orders: Array = []                 # customer orders (new / accepted / repair)
+var inventory: Dictionary = {}         # part key -> count
+var ratings: Array = []                # customer star ratings
+var next_order_at := 0.0
+var order_seq := 0
+var FAULTS: Dictionary = Data.faults()
 var active_device := ""
 var focus_job := "laptop"
 var walk_yaw := 0.0
@@ -158,6 +132,10 @@ var popup_box: VBoxContainer
 var pause_root: Control
 var fade: ColorRect
 var meter_panel: PanelContainer
+var board_root: Control
+var board_box: VBoxContainer
+var board_kind := ""
+var orders_badge: Label
 var meter_label: Label
 
 
@@ -172,8 +150,6 @@ func _ready() -> void:
 	_build_tools()
 	_build_hand()
 	_reset_jobs()
-	_spawn_device("laptop")
-	_spawn_device("phone")
 	_build_icons()
 	_build_ui()
 	_apply_settings()
@@ -268,7 +244,8 @@ func _build_hand() -> void:
 		else:
 			hand.tool_mount.add_child(t)
 			if id == "air":
-				t.position = Vector3(0.0, 0.03, -0.014)
+				# can body sits in the fist, slightly away from the palm
+				t.position = Vector3(-0.012, -0.03, 0.0)
 			elif id == "brush":
 				t.position = Vector3(0.0, -0.035, 0.0)
 			elif id == "multimeter":
@@ -281,26 +258,46 @@ func _build_hand() -> void:
 
 
 func _reset_jobs() -> void:
-	for id in JOBS.keys():
-		jobs[id] = {"step": 0, "progress": 0, "diagnosed": false, "done": false, "counter": 0}
+	for d in devices.values():
+		if is_instance_valid(d):
+			d.queue_free()
+	devices.clear()
+	jobs.clear()
 
 
-func _spawn_device(id: String) -> void:
+func _fault(id: String) -> Dictionary:
+	return FAULTS[jobs[id]["fault"]]
+
+
+func _dev_name(id: String) -> String:
+	return str(Data.DEVICES[id]["name"])
+
+
+## Puts a customer's device on its bench slot, set up for its fault.
+func _spawn_device(id: String, order: Dictionary) -> void:
 	if devices.has(id) and is_instance_valid(devices[id]):
 		devices[id].queue_free()
 	var d: Node3D
-	if id == "laptop":
-		d = Laptop.new()
-		d.position = LAPTOP_POS
-		d.rotation_degrees.y = 4
-	else:
-		d = Phone.new()
-		d.position = PHONE_POS
-		d.rotation_degrees.y = -12
+	match id:
+		"laptop":
+			d = Laptop.new()
+		"phone":
+			d = Phone.new()
+		_:
+			d = Gamepad.new()
+	var slot: Array = SLOT_POS[id]
+	d.position = slot[0]
+	d.rotation_degrees.y = slot[1]
 	add_child(d)
 	devices[id] = d
 	d.set_pickable(true)
-	jobs[id] = {"step": 0, "progress": 0, "diagnosed": false, "done": false, "counter": 0}
+	var fk: String = order["fault"]
+	if id == "laptop":
+		d.set_dirty(fk == "laptop_battery" or fk == "laptop_fan")
+	elif id == "phone" and fk != "phone_screen":
+		d.set_screen_ok()
+	jobs[id] = {"order": order, "fault": fk, "step": 0, "progress": 0, "diagnosed": false, "done": false, "used": []}
+	order["status"] = "repair"
 
 
 ## Renders each tool once into a transparent texture (hotbar / wheel icons).
@@ -348,8 +345,6 @@ func _build_icons() -> void:
 				t.position = Vector3(0.0, 0.0, 0)
 				c.size = 0.16
 			"air":
-				var holder: Node3D = t.get_node("AirCanHolder")
-				holder.rotation_degrees = Vector3(0, 0, 0)
 				t.rotation_degrees = Vector3(12, -30, -18)
 				t.position = Vector3(0.0, -0.045, 0)
 				c.size = 0.2
@@ -384,6 +379,8 @@ func _process(delta: float) -> void:
 		minutes += delta * (1.0 if mode != "wheel" else 0.25)
 		if minutes >= 20 * 60:
 			_end_of_day()
+		elif mode != "wheel":
+			_order_tick()
 	match mode:
 		"walk":
 			_walk_move(delta)
@@ -446,6 +443,14 @@ func _handle_key(e: InputEventKey) -> void:
 		if k == KEY_ESCAPE:
 			_resume()
 		return
+	if mode == "board":
+		if k == KEY_ESCAPE or (k == KEY_P and board_kind == "orders") or (k == KEY_L and board_kind == "shop"):
+			_close_board()
+		elif k == KEY_P:
+			_open_board("orders")
+		elif k == KEY_L:
+			_open_board("shop")
+		return
 	if mode == "wheel":
 		if k == KEY_ESCAPE or k == KEY_TAB:
 			_close_wheel()
@@ -459,6 +464,10 @@ func _handle_key(e: InputEventKey) -> void:
 			_pause()
 	elif k == KEY_TAB:
 		_open_wheel()
+	elif k == KEY_P:
+		_open_board("orders")
+	elif k == KEY_L:
+		_open_board("shop")
 	elif k >= KEY_1 and k <= KEY_5:
 		var id: String = Tools.IDS[k - KEY_1]
 		_equip(id if tool != id else "none")
@@ -511,16 +520,17 @@ func _walk_hover() -> void:
 	var where := Vector3.ZERO
 	if not hit.is_empty() and hit.collider.has_meta("target"):
 		var t := str(hit.collider.get_meta("target"))
-		if t == "device":
-			pick = "device:" + str(hit.collider.get_meta("device"))
-			where = (devices[str(hit.collider.get_meta("device"))] as Node3D).global_position + Vector3(0, 0.12, 0)
+		var dev_id := str(hit.collider.get_meta("device", ""))
+		if t == "device" and devices.has(dev_id) and jobs.has(dev_id):
+			pick = "device:" + dev_id
+			where = (devices[dev_id] as Node3D).global_position + Vector3(0, 0.12, 0)
 		elif t.begins_with("tool:"):
 			pick = t
 			where = hit.collider.global_position + Vector3(0, 0.07, 0)
 	if pick != hovered_pick:
 		if hovered_pick.begins_with("device:"):
 			var old_id := hovered_pick.substr(7)
-			if devices.has(old_id):
+			if devices.has(old_id) and is_instance_valid(devices[old_id]):
 				devices[old_id].set_device_highlight(false)
 		hovered_pick = pick
 		if pick.begins_with("device:"):
@@ -531,7 +541,7 @@ func _walk_hover() -> void:
 	var text := ""
 	if pick.begins_with("device:"):
 		var id := pick.substr(7)
-		text = "Reparar %s" % JOBS[id]["name"] if not jobs[id]["done"] else "%s reparado" % JOBS[id]["name"]
+		text = "Reparar %s de %s" % [_dev_name(id), jobs[id]["order"]["customer"]] if not jobs[id]["done"] else "%s reparado" % _dev_name(id)
 	else:
 		var tid := pick.substr(5)
 		text = "Pegar %s" % Tools.NAMES[tid] if tool != tid else "Pousar %s" % Tools.NAMES[tid]
@@ -554,8 +564,7 @@ func _show_prompt(key: String, text: String, world_pos: Vector3) -> void:
 func _interact_walk() -> void:
 	if hovered_pick.begins_with("device:"):
 		var id := hovered_pick.substr(7)
-		if jobs[id]["done"]:
-			_toast("Este %s já está reparado." % JOBS[id]["name"].to_lower())
+		if not jobs.has(id) or jobs[id]["done"]:
 			return
 		_enter_inspect(id)
 	elif hovered_pick.begins_with("tool:"):
@@ -627,7 +636,7 @@ func _move_camera(target: Transform3D, duration: float) -> void:
 
 
 func _step_def(id: String) -> Dictionary:
-	var steps: Array = JOBS[id]["steps"]
+	var steps: Array = _fault(id)["steps"]
 	var s: int = jobs[id]["step"]
 	if s >= steps.size():
 		return {}
@@ -664,12 +673,13 @@ func _begin_step(run_enter := true) -> void:
 
 func _activate_step_targets() -> void:
 	var id := active_device
-	if id == "":
+	if id == "" or not jobs.has(id):
 		return
 	var step := _step_def(id)
 	if step.is_empty():
 		return
 	var d: Node3D = devices[id]
+	_ensure_part(id, step)
 	var remaining: Array = []
 	var done_list: Array = jobs[id].get("used", [])
 	var targets: Array = step["targets"]
@@ -681,14 +691,24 @@ func _activate_step_targets() -> void:
 	d.set_active_targets(remaining)
 
 
-func _restore_pose(id: String) -> float:
+## Install steps need the spare part on the mat: take it from stock or ask to buy it.
+func _ensure_part(id: String, step: Dictionary) -> void:
+	var act := str(step.get("act", ""))
+	if not (act == "install_part" or act == "install_screen"):
+		return
+	var part := str(step.get("part", ""))
 	var d: Node3D = devices[id]
-	var s: int = jobs[id]["step"]
-	if id == "laptop":
-		if s >= 3 and s <= 9 and not d.flipped:
-			d.set_lid(0, 0.3)
-			d.flip(true, 0.9)
-			return 1.0
+	if part == "" or d.has_new_part(part):
+		return
+	if int(inventory.get(part, 0)) > 0:
+		inventory[part] = int(inventory[part]) - 1
+		d.spawn_part(part, PART_POS[id])
+		_toast("Tiraste do stock: %s" % Data.PARTS[part]["name"], false, GREEN)
+	else:
+		_toast("Falta a peça: %s. Compra-a na Loja (L)." % Data.PARTS[part]["name"], true)
+
+
+func _restore_pose(_id: String) -> float:
 	return 0.0
 
 
@@ -800,7 +820,7 @@ func _advance_step(id: String) -> void:
 	jobs[id]["step"] = int(jobs[id]["step"]) + 1
 	jobs[id]["progress"] = 0
 	jobs[id]["used"] = []
-	var steps: Array = JOBS[id]["steps"]
+	var steps: Array = _fault(id)["steps"]
 	if int(jobs[id]["step"]) >= steps.size():
 		_refresh_repair_panel()
 		get_tree().create_timer(1.5).timeout.connect(func() -> void: _job_complete(id))
@@ -811,6 +831,7 @@ func _advance_step(id: String) -> void:
 ## Performs a step action; returns its duration in seconds.
 func _perform(id: String, act: String, target: String) -> float:
 	var d: Node3D = devices[id]
+	var step := _step_def(id)
 	match act:
 		"open_lid":
 			d.set_lid(112, 0.9)
@@ -820,11 +841,36 @@ func _perform(id: String, act: String, target: String) -> float:
 			d.show_dead_battery()
 			_toast("Não liga... o ecrã pisca \"Bateria 0%\". Vamos medir.")
 			return 1.2
+		"power_hot":
+			d.press_power(false)
+			d.boot_then_fail("SOBREAQUECIMENTO\nTemperatura do CPU: 98 °C\nA desligar...", Color("ff6b5b"))
+			jobs[id]["diagnosed"] = true
+			get_tree().create_timer(1.6).timeout.connect(func() -> void:
+				_toast("Arranca e desliga-se a ferver. Avaria: SOBREAQUECIMENTO", false, GREEN))
+			return 2.0
+		"power_nodisk":
+			d.press_power(false)
+			d.boot_then_fail("Nenhum dispositivo de arranque encontrado.\nInsira um disco e reinicie.", Color("e8eef4"))
+			jobs[id]["diagnosed"] = true
+			get_tree().create_timer(1.6).timeout.connect(func() -> void:
+				_toast("O sistema não encontra o disco. Avaria: SSD", false, GREEN))
+			return 2.0
+		"power_lowbat":
+			d.press_button_only()
+			d.show_message("Bateria 1%\nA desligar...", Color("ff6b5b"), 1.8)
+			_toast("Liga e desliga-se logo... e o ecrã está levantado de um lado.")
+			return 1.2
+		"power_nocharge":
+			d.press_button_only()
+			d.show_message("Bateria fraca\nLigue o carregador", Color("ffcf6b"), 1.8)
+			_toast("Sem bateria, e o cabo não carrega. Vamos medir a porta.")
+			return 1.2
 		"measure":
 			var digits: Label3D = bench_tools["multimeter"].get_node("Body/Digits")
+			var reading := str(step.get("reading", "0.00"))
 			meter_panel.show()
 			var tw := create_tween()
-			for v in ["12.6", "4.18", "0.71", "0.00"]:
+			for v in ["12.6", "4.18", "0.71", reading]:
 				tw.tween_callback(func() -> void:
 					digits.text = v
 					meter_label.text = v + " V")
@@ -832,8 +878,8 @@ func _perform(id: String, act: String, target: String) -> float:
 			tw.tween_interval(2.5)
 			tw.tween_callback(meter_panel.hide)
 			jobs[id]["diagnosed"] = true
-			get_tree().create_timer(1.0).timeout.connect(func() -> void:
-				_toast("0,00 V — a bateria não segura carga. Avaria: BATERIA", false, GREEN))
+			var result := str(step.get("result", ""))
+			get_tree().create_timer(1.0).timeout.connect(func() -> void: _toast(result, false, GREEN))
 			return 1.1
 		"unscrew":
 			var idx := int(target.right(1))
@@ -844,39 +890,36 @@ func _perform(id: String, act: String, target: String) -> float:
 			d.screw_in(idx2)
 			return 0.85
 		"remove_cover":
-			d.remove_cover(COVER_ASIDE)
+			d.remove_cover(COVER_ASIDE_BY.get(id, COVER_ASIDE))
 			return 1.2
-		"clean_fan":
-			_dust_puff(d.targets["fan"].global_position)
-			var clean: bool = d.clean_fan()
-			if clean:
-				_toast("Ventoinha limpa!", false, GREEN)
-			return 0.65
-		"remove_battery":
-			d.remove_battery(OLD_PART_BIN)
-			return 1.4
-		"install_battery":
-			_spend(float(JOBS[id]["part"]), "Bateria nova")
-			d.install_new_battery()
-			return 1.15
 		"replace_cover":
 			d.replace_cover()
 			return 1.05
+		"clean_fan":
+			_dust_puff(d.targets["fan"].global_position)
+			if d.clean_fan():
+				_toast("Ventoinha limpa!", false, GREEN)
+			return 0.65
+		"remove_part":
+			d.remove_part(str(step["part"]), OLD_PART_BIN)
+			return 1.4
+		"install_part":
+			d.install_part(str(step["part"]))
+			return 1.0
 		"power_on":
 			if id == "laptop":
 				d.press_power(true)
 			else:
 				d.press_power("on")
 			get_tree().create_timer(0.8).timeout.connect(func() -> void:
-				_toast("Liga perfeitamente! Reparação concluída.", false, GREEN))
+				_toast("Funciona perfeitamente! Reparação concluída.", false, GREEN))
 			return 1.6
 		"power_glitch":
 			d.press_power("glitch")
 			_toast("O ecrã pisca com riscos... parece danificado.")
 			return 1.0
 		"wipe":
-			var clean2: bool = d.wipe()
-			if clean2:
+			if d.wipe():
 				jobs[id]["diagnosed"] = true
 				_toast("Vidro e painel rachados. Avaria: ECRÃ PARTIDO", false, GREEN)
 			return 0.55
@@ -887,12 +930,46 @@ func _perform(id: String, act: String, target: String) -> float:
 			d.remove_old_screen(OLD_SCREEN_ASIDE)
 			return 1.25
 		"install_screen":
-			_spend(float(JOBS[id]["part"]), "Ecrã novo")
 			d.install_new_screen()
 			return 1.0
 		"close_screen":
 			d.close_screen()
 			return 0.95
+		"blow_port":
+			_dust_puff(d.targets["port"].global_position)
+			return 0.6
+		"pad_on":
+			d.set_led(true)
+			_toast("Liga. Vamos ver o que se passa.")
+			return 0.6
+		"pad_drift":
+			d.wiggle_stick(true)
+			jobs[id]["diagnosed"] = true
+			get_tree().create_timer(0.6).timeout.connect(func() -> void:
+				_toast("O analógico não volta ao centro. Avaria: DRIFT", false, GREEN))
+			return 0.9
+		"pad_test":
+			d.wiggle_stick(false)
+			d.set_led(true)
+			get_tree().create_timer(0.6).timeout.connect(func() -> void:
+				_toast("Analógico perfeito, sem drift! Reparação concluída.", false, GREEN))
+			return 1.0
+		"pad_stuck":
+			d.press_a(true)
+			jobs[id]["diagnosed"] = true
+			get_tree().create_timer(0.8).timeout.connect(func() -> void:
+				_toast("O botão fica preso — sujidade pegajosa. Avaria: BOTÕES", false, GREEN))
+			return 1.3
+		"clean_buttons":
+			_dust_puff(d.targets["buttons"].global_position)
+			d.clean_buttons()
+			return 0.6
+		"pad_ok":
+			d.press_a(false)
+			d.set_led(true)
+			get_tree().create_timer(0.4).timeout.connect(func() -> void:
+				_toast("Os botões estão como novos! Reparação concluída.", false, GREEN))
+			return 0.8
 	return 0.4
 
 
@@ -900,21 +977,19 @@ func _run_enter(id: String, what: String) -> float:
 	var d: Node3D = devices[id]
 	match what:
 		"flip_bottom":
-			d.set_lid(0, 0.6)
-			get_tree().create_timer(0.6).timeout.connect(func() -> void: d.flip(true, 1.0))
-			return 1.7
+			if id == "laptop":
+				d.set_lid(0, 0.6)
+				get_tree().create_timer(0.6).timeout.connect(func() -> void: d.flip(true, 1.0))
+				return 1.7
+			d.flip(true, 0.9)
+			return 1.0
+		"flip_top":
+			d.flip(false, 0.9)
+			return 1.0
 		"flip_top_open":
 			d.flip(false, 1.0)
 			get_tree().create_timer(1.05).timeout.connect(func() -> void: d.set_lid(112, 0.8))
 			return 1.9
-		"spawn_battery":
-			d.spawn_new_battery(NEW_BATTERY_POS)
-			_toast("Bateria nova pronta ao lado do portátil.")
-			return 0.0
-		"spawn_screen":
-			d.spawn_new_screen(NEW_SCREEN_POS)
-			_toast("Ecrã novo pronto ao lado do telemóvel.")
-			return 0.0
 	return 0.0
 
 
@@ -1011,6 +1086,8 @@ func _update_hand_inspect(delta: float) -> void:
 		tip = hand.index_tip_local() if tool == "none" else tool_tips["cloth"]
 	else:
 		var d := (Vector3.DOWN * 1.0 + fwd * 0.28 - right * 0.32).normalized()
+		if tool == "air":
+			d = (Vector3.DOWN + fwd * 0.12).normalized()
 		var a := (right * 0.75 - fwd * 0.55 + Vector3.UP * 0.15).normalized()
 		var x_axis := d
 		var z_axis := (a - x_axis * a.dot(x_axis)).normalized()
@@ -1019,6 +1096,9 @@ func _update_hand_inspect(delta: float) -> void:
 		if hand_twist != 0.0:
 			basis = basis.rotated(d, hand_twist * (0.25 if tool == "screwdriver" else 1.0))
 		tip = tool_tips[tool]
+	if tool == "air":
+		# spray from a short distance, keeping the nozzle on the cursor ray
+		p -= dir * 0.13
 	var press_dir := (p - from).normalized()
 	var lift := 0.012 * (1.0 - hand_press)
 	var target_origin := p - basis * tip - press_dir * lift
@@ -1065,40 +1145,140 @@ func _spend(amount: float, what: String) -> void:
 	_toast("-%s  %s" % [_eur(amount), what])
 
 
+func _abs_minutes() -> float:
+	return float(day - 1) * 1440.0 + minutes
+
+
+func _clock_text(abs_min: float) -> String:
+	var d := int(abs_min / 1440.0) + 1
+	var m := int(fmod(abs_min, 1440.0))
+	var t := "%02d:%02d" % [m / 60, m % 60]
+	return t if d == day else "Dia %d, %s" % [d, t]
+
+
+func _reputation() -> float:
+	if ratings.is_empty():
+		return 5.0
+	var total := 0.0
+	for r in ratings:
+		total += float(r)
+	return total / ratings.size()
+
+
+## Creates a random customer order (device + fault + complaint + payment + deadline).
+func _new_order(silent := false) -> void:
+	var keys: Array = FAULTS.keys()
+	# avoid flooding the same device
+	var fk: String = keys[randi() % keys.size()]
+	var f: Dictionary = FAULTS[fk]
+	var cust: Array = Data.CUSTOMERS[randi() % Data.CUSTOMERS.size()]
+	var complaints: Array = f["complaints"]
+	order_seq += 1
+	var rep_bonus := 0.9 + 0.04 * _reputation()
+	var pay := snappedf(float(f["pay"]) * randf_range(0.9, 1.2) * rep_bonus, 5.0)
+	var o := {
+		"id": order_seq, "customer": cust[0], "color": cust[1], "device": f["device"], "fault": fk,
+		"complaint": complaints[randi() % complaints.size()], "pay": pay,
+		"deadline": _abs_minutes() + randf_range(150, 330), "expires": _abs_minutes() + 150, "status": "new",
+	}
+	orders.append(o)
+	if not silent:
+		_toast("Novo cliente: %s trouxe um %s. Abre os Pedidos (P)." % [o["customer"], _dev_name(o["device"]).to_lower()], false, YELLOW)
+	_refresh_orders_badge()
+
+
+func _order_tick() -> void:
+	var now := _abs_minutes()
+	if now >= next_order_at:
+		var pending := 0
+		for o in orders:
+			if o["status"] == "new":
+				pending += 1
+		if pending < 3 and minutes < 18 * 60:
+			_new_order()
+		next_order_at = now + randf_range(50, 110) / clampf(_reputation() / 4.0, 0.7, 1.25)
+	# unanswered requests walk out
+	for o in orders.duplicate():
+		if o["status"] == "new" and now > float(o["expires"]):
+			orders.erase(o)
+			_toast("%s cansou-se de esperar e foi embora." % o["customer"], true)
+			_refresh_orders_badge()
+
+
+func _accept_order(o: Dictionary) -> void:
+	o["status"] = "accepted"
+	_toast("Pedido de %s aceite." % o["customer"], false, GREEN)
+	_place_waiting_orders()
+	_refresh_orders_panel()
+	_refresh_objective()
+
+
+func _decline_order(o: Dictionary) -> void:
+	orders.erase(o)
+	_refresh_orders_panel()
+	_refresh_orders_badge()
+
+
+## Moves accepted orders onto free bench slots.
+func _place_waiting_orders() -> void:
+	for o in orders:
+		if o["status"] == "accepted" and not jobs.has(o["device"]):
+			_spawn_device(o["device"], o)
+			var d: Node3D = devices[o["device"]]
+			d.scale = Vector3(0.01, 0.01, 0.01)
+			var t := create_tween()
+			t.tween_property(d, "scale", Vector3.ONE, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			if mode == "walk":
+				focus_job = o["device"]
+	_refresh_orders_badge()
+
+
 func _job_complete(id: String) -> void:
 	jobs[id]["done"] = true
-	var info: Dictionary = JOBS[id]
-	var profit := float(info["sell"]) - float(info["buy"]) - float(info["part"])
+	var o: Dictionary = jobs[id]["order"]
+	var f := _fault(id)
+	var on_time := _abs_minutes() <= float(o["deadline"])
+	var tip := snappedf(float(o["pay"]) * (randf_range(0.1, 0.25) if on_time else 0.0), 1.0)
+	var stars := 5 if on_time else 3
+	if on_time and _abs_minutes() > float(o["deadline"]) - 30.0:
+		stars = 4
+	var star_txt := "★".repeat(stars) + "☆".repeat(5 - stars)
 	_open_popup("Reparação concluída!", [
-		["%s — %s" % [info["name"], info["fault"]], TEXT],
-		["Custo do equipamento:  %s" % _eur(float(info["buy"])), MUTED],
-		["Peça substituída:  %s" % _eur(float(info["part"])), MUTED],
-		["Preço de venda:  %s" % _eur(float(info["sell"])), GREEN],
-		["Lucro:  %s     +40 XP" % _eur(profit), YELLOW],
-	], [["Vender e continuar", func() -> void: _sell(id)]], false)
+		["%s — %s" % [_dev_name(id), f["fault"]], TEXT],
+		["Cliente: %s" % o["customer"], MUTED],
+		["Pagamento:  %s" % _eur(float(o["pay"])), GREEN],
+		["Gorjeta:  %s" % _eur(tip) if tip > 0 else "Sem gorjeta (entregue fora de prazo)", GREEN if tip > 0 else Color("ffb4a8")],
+		["Avaliação:  %s     +%d XP" % [star_txt, int(f["xp"])], YELLOW],
+	], [["Entregar a %s" % o["customer"], func() -> void: _deliver(id, tip, stars)]], false)
 
 
-func _sell(id: String) -> void:
-	var info: Dictionary = JOBS[id]
-	money += float(info["sell"])
-	day_profit += float(info["sell"])
+func _deliver(id: String, tip: float, stars: int) -> void:
+	var o: Dictionary = jobs[id]["order"]
+	var f := _fault(id)
+	var gain := float(o["pay"]) + tip
+	money += gain
+	day_profit += gain
 	repaired += 1
-	_gain_xp(40)
+	ratings.append(stars)
+	if ratings.size() > 30:
+		ratings.pop_front()
+	_gain_xp(int(f["xp"]))
 	_close_popup()
 	_exit_inspect_forced()
+	orders.erase(o)
+	jobs.erase(id)
 	var d: Node3D = devices[id]
+	d.set_pickable(false)
+	d.set_device_highlight(false)
+	hovered_pick = ""
+	devices.erase(id)
 	var tw := create_tween()
 	tw.tween_property(d, "scale", Vector3(0.01, 0.01, 0.01), 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	tw.tween_callback(func() -> void:
-		_spawn_device(id)
-		devices[id].scale = Vector3(0.01, 0.01, 0.01)
-		var t2 := create_tween()
-		t2.tween_property(devices[id], "scale", Vector3.ONE, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		# money for the next device to repair
-		money -= float(info["buy"])
-		day_profit -= float(info["buy"])
-		_toast("Vendido! Chegou outro %s para reparar (-%s)." % [str(info["name"]).to_lower(), _eur(float(info["buy"]))])
+		d.queue_free()
+		_place_waiting_orders()
 		_refresh_objective())
+	_toast("+%s  %s ficou muito contente!" % [_eur(gain), o["customer"]], false, GREEN)
 	_save_game()
 
 
@@ -1119,11 +1299,19 @@ func _end_of_day() -> void:
 		["A oficina fecha às 20:00.", TEXT],
 		["Resultado do dia:  %s" % _eur(p), GREEN if p >= 0 else Color("e74c3c")],
 		["Equipamentos reparados (total):  %d" % repaired, MUTED],
+		["Reputação:  %.1f ★" % _reputation(), YELLOW],
 	], [["Começar o Dia %d" % (finished_day + 1), func() -> void:
 		day = finished_day + 1
 		minutes = 8 * 60
 		day_profit = 0.0
+		next_order_at = _abs_minutes() + 20.0
+		for o in orders.duplicate():
+			if o["status"] == "new":
+				orders.erase(o)
+		_new_order(true)
+		_new_order(true)
 		_close_popup()
+		_refresh_orders_badge()
 		_save_game()]], false)
 
 
@@ -1134,7 +1322,7 @@ func _save_game() -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		return
-	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money, "xp": xp, "level": level, "repaired": repaired}))
+	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inventory}))
 
 
 func _has_save() -> bool:
@@ -1156,6 +1344,12 @@ func _load_game() -> bool:
 	xp = int(data.get("xp", 0))
 	level = int(data.get("level", 1))
 	repaired = int(data.get("repaired", 0))
+	ratings = data.get("ratings", [])
+	inventory = {}
+	var inv = data.get("inventory", {})
+	if inv is Dictionary:
+		for k in inv.keys():
+			inventory[k] = int(inv[k])
 	return true
 
 
@@ -1280,6 +1474,7 @@ func _build_ui() -> void:
 	_build_hud(base)
 	_build_wheel(base)
 	_build_menu(base)
+	_build_board(base)
 	_build_pause(base)
 	_build_popup(base)
 	fade = ColorRect.new()
@@ -1465,6 +1660,38 @@ func _build_hud(base: Control) -> void:
 	toast.add_child(toast_label)
 	toast.modulate.a = 0.0
 	hud.add_child(toast)
+
+	# shortcuts (orders / shop) bottom-left
+	var sc := HBoxContainer.new()
+	sc.anchor_top = 1.0
+	sc.anchor_bottom = 1.0
+	sc.offset_left = 22
+	sc.offset_top = -62
+	sc.offset_bottom = -22
+	sc.add_theme_constant_override("separation", 10)
+	sc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(sc)
+	for it in [["P", "Pedidos"], ["L", "Loja"]]:
+		var pp := _panel(Color(0.04, 0.07, 0.11, 0.88), 10, Vector4(10, 6, 14, 6))
+		var hh := HBoxContainer.new()
+		hh.add_theme_constant_override("separation", 8)
+		pp.add_child(hh)
+		hh.add_child(_keycap(it[0]))
+		hh.add_child(_label(it[1], 17))
+		if it[0] == "P":
+			orders_badge = _label("", 15, Color("10161d"), font_xbold)
+			var bp := PanelContainer.new()
+			var bsb := StyleBoxFlat.new()
+			bsb.bg_color = YELLOW
+			bsb.set_corner_radius_all(9)
+			bsb.content_margin_left = 7
+			bsb.content_margin_right = 7
+			bp.add_theme_stylebox_override("panel", bsb)
+			bp.add_child(orders_badge)
+			hh.add_child(bp)
+			orders_badge.set_meta("wrap", bp)
+		sc.add_child(pp)
+	hud.set_meta("shortcuts", sc)
 
 	# multimeter readout
 	meter_panel = _panel(Color("1a1d12"), 10, Vector4(18, 10, 18, 12))
@@ -1664,24 +1891,38 @@ func _row(text: String, state: String) -> Control:
 
 
 func _refresh_objective() -> void:
+	if objective_rows == null:
+		return
 	for c in objective_rows.get_children():
 		c.queue_free()
-	# focus on the first unfinished job
-	if jobs[focus_job]["done"]:
-		for id in JOBS.keys():
+	if not jobs.has(focus_job) or jobs[focus_job]["done"]:
+		focus_job = ""
+		for id in jobs.keys():
 			if not jobs[id]["done"]:
 				focus_job = id
 				break
+	if focus_job == "":
+		objective_title.text = "Objetivo Atual"
+		var waiting := 0
+		for o in orders:
+			if o["status"] == "new":
+				waiting += 1
+		objective_rows.add_child(_row("Não há trabalho na bancada", "done"))
+		objective_rows.add_child(_row("Abre os Pedidos (P) e aceita um cliente", "active"))
+		if waiting > 0:
+			objective_rows.add_child(_label("%d cliente(s) à espera de resposta" % waiting, 13, YELLOW))
+		return
 	var id := focus_job
 	var j: Dictionary = jobs[id]
+	var o: Dictionary = j["order"]
+	objective_title.text = "%s de %s" % [_dev_name(id), o["customer"]]
 	var s: int = j["step"]
-	var steps: Array = JOBS[id]["steps"]
-	var name_l := str(JOBS[id]["name"]).to_lower()
+	var steps: Array = _fault(id)["steps"]
 	var items := [
-		["Examinar o %s" % name_l, s >= 2 if id == "laptop" else s >= 1],
+		["Examinar o %s" % _dev_name(id).to_lower(), s >= 1],
 		["Diagnosticar a avaria", bool(j["diagnosed"])],
 		["Reparar o equipamento", s >= steps.size() - 1],
-		["Testar e vender", bool(j["done"])],
+		["Testar e entregar", bool(j["done"])],
 	]
 	var active_set := false
 	for it in items:
@@ -1690,28 +1931,32 @@ func _refresh_objective() -> void:
 		if not done:
 			active_set = true
 		objective_rows.add_child(_row(it[0], st))
-	var other := "phone" if id == "laptop" else "laptop"
-	if not jobs[other]["done"]:
-		var l := _label("Também na bancada: %s" % JOBS[other]["name"], 13, MUTED)
-		objective_rows.add_child(l)
+	var late := _abs_minutes() > float(o["deadline"])
+	objective_rows.add_child(_label("Prazo: %s%s" % [_clock_text(float(o["deadline"])), "  (atrasado!)" if late else ""], 13, Color("ffb4a8") if late else MUTED))
+	var others: Array = []
+	for other in jobs.keys():
+		if other != id and not jobs[other]["done"]:
+			others.append(_dev_name(other))
+	if not others.is_empty():
+		objective_rows.add_child(_label("Também na bancada: %s" % ", ".join(others), 13, MUTED))
 
 
 func _refresh_repair_panel() -> void:
 	if active_device == "":
 		return
 	var id := active_device
-	repair_title.text = "Reparação: %s" % JOBS[id]["name"]
+	repair_title.text = "Reparação: %s" % _dev_name(id)
 	for c in repair_rows.get_children():
 		c.queue_free()
 	var j: Dictionary = jobs[id]
-	var steps: Array = JOBS[id]["steps"]
+	var steps: Array = _fault(id)["steps"]
 	var cur: int = j["step"]
 	var cur_group: int = steps[cur]["g"] if cur < steps.size() else 99
-	var groups: Array = JOBS[id]["groups"]
+	var groups: Array = _fault(id)["groups"]
 	for gi in range(groups.size()):
 		var text: String = groups[gi]
 		if gi == 1 and bool(j["diagnosed"]):
-			text += " (%s)" % JOBS[id]["fault"]
+			text += " (%s)" % _fault(id)["fault"]
 		if gi == 2:
 			var total := 0
 			var done_count := 0
@@ -1719,7 +1964,8 @@ func _refresh_repair_panel() -> void:
 				if str(steps[si]["act"]) == "unscrew":
 					total = int(steps[si].get("need", 1))
 					done_count = total if cur > si else (int(j["progress"]) if cur == si else 0)
-			text += " (%d/%d)" % [done_count, total]
+			if total > 0:
+				text += " (%d/%d)" % [done_count, total]
 		var st := "done" if gi < cur_group else ("active" if gi == cur_group else "todo")
 		repair_rows.add_child(_row(text, st))
 	if cur < steps.size():
@@ -1730,6 +1976,244 @@ func _refresh_repair_panel() -> void:
 		_set_hints([["mouse_l", str(step["verb"])], ["mouse_r", "Rodar"], ["TAB", "Ferramentas"], ["Esc", "Voltar"]])
 	else:
 		step_hint.text = "Reparação concluída!"
+
+
+# --- orders board + parts shop -------------------------------------------------
+func _build_board(base: Control) -> void:
+	board_root = Control.new()
+	board_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	base.add_child(board_root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.01, 0.02, 0.04, 0.6)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	board_root.add_child(dim)
+	var p := _panel(Color(0.035, 0.06, 0.1, 0.97), 16, Vector4(24, 18, 24, 20))
+	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	p.anchor_left = 0.5
+	p.anchor_right = 0.5
+	p.anchor_top = 0.5
+	p.anchor_bottom = 0.5
+	p.offset_left = -390
+	p.offset_right = 390
+	p.offset_top = -300
+	p.offset_bottom = 300
+	board_root.add_child(p)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	p.add_child(v)
+	# tabs
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 10)
+	v.add_child(tabs)
+	for t in [["orders", "Pedidos  (P)"], ["shop", "Loja de Peças  (L)"]]:
+		var b := Button.new()
+		b.text = t[1]
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(190, 40)
+		b.add_theme_font_override("font", font_xbold)
+		b.add_theme_font_size_override("font_size", 18)
+		var kind: String = t[0]
+		b.pressed.connect(func() -> void: _open_board(kind))
+		tabs.add_child(b)
+		b.set_meta("kind", kind)
+	board_root.set_meta("tabs", tabs)
+	var fill := Control.new()
+	fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tabs.add_child(fill)
+	var money_l := _label("", 18, TEXT, font_xbold)
+	tabs.add_child(money_l)
+	board_root.set_meta("money", money_l)
+	var close := Button.new()
+	close.text = "Fechar (Esc)"
+	close.focus_mode = Control.FOCUS_NONE
+	close.pressed.connect(_close_board)
+	tabs.add_child(close)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(scroll)
+	board_box = VBoxContainer.new()
+	board_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	board_box.add_theme_constant_override("separation", 10)
+	scroll.add_child(board_box)
+	board_root.hide()
+
+
+func _open_board(kind: String) -> void:
+	if mode != "board":
+		prev_mode = mode
+	mode = "board"
+	board_kind = kind
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	prompt.hide()
+	board_root.show()
+	_refresh_board()
+
+
+func _close_board() -> void:
+	board_root.hide()
+	mode = prev_mode if prev_mode in ["walk", "inspect"] else "walk"
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if mode == "walk" else Input.MOUSE_MODE_HIDDEN
+	if mode == "inspect":
+		_activate_step_targets()
+	_refresh_objective()
+
+
+func _refresh_orders_panel() -> void:
+	if board_root and board_root.visible:
+		_refresh_board()
+
+
+func _refresh_orders_badge() -> void:
+	if orders_badge == null:
+		return
+	var n := 0
+	for o in orders:
+		if o["status"] == "new":
+			n += 1
+	orders_badge.text = str(n)
+	(orders_badge.get_meta("wrap") as Control).visible = n > 0
+
+
+func _refresh_board() -> void:
+	for c in board_box.get_children():
+		board_box.remove_child(c)
+		c.queue_free()
+	var tabs: HBoxContainer = board_root.get_meta("tabs")
+	for b in tabs.get_children():
+		if b is Button and b.has_meta("kind"):
+			var sel: bool = b.get_meta("kind") == board_kind
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = YELLOW if sel else Color(0.1, 0.15, 0.22, 1)
+			sb.set_corner_radius_all(10)
+			b.add_theme_stylebox_override("normal", sb)
+			b.add_theme_stylebox_override("hover", sb)
+			b.add_theme_stylebox_override("pressed", sb)
+			b.add_theme_color_override("font_color", Color("10161d") if sel else TEXT)
+			b.add_theme_color_override("font_hover_color", Color("10161d") if sel else TEXT)
+	(board_root.get_meta("money") as Label).text = "%s    ★ %.1f" % [_eur(money), _reputation()]
+	if board_kind == "orders":
+		_fill_orders()
+	else:
+		_fill_shop()
+
+
+func _fill_orders() -> void:
+	if orders.is_empty():
+		board_box.add_child(_label("Ainda não há clientes. Vão chegando ao longo do dia.", 18, MUTED))
+		return
+	var status_txt := {"new": ["NOVO PEDIDO", YELLOW], "accepted": ["NA FILA", Color("7fb3ff")], "repair": ["NA BANCADA", GREEN]}
+	for o in orders:
+		var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(14, 12, 14, 12))
+		card.mouse_filter = Control.MOUSE_FILTER_PASS
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 14)
+		card.add_child(h)
+		# avatar with initial
+		var av := Control.new()
+		av.custom_minimum_size = Vector2(56, 56)
+		var col: Color = o["color"]
+		var initial: String = str(o["customer"]).left(1)
+		var fnt := font_xbold
+		av.draw.connect(func() -> void:
+			av.draw_circle(Vector2(28, 28), 27, col)
+			av.draw_string(fnt, Vector2(0, 38), initial, HORIZONTAL_ALIGNMENT_CENTER, 56, 28, Color("10161d")))
+		h.add_child(av)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_constant_override("separation", 2)
+		h.add_child(info)
+		var top := HBoxContainer.new()
+		top.add_theme_constant_override("separation", 10)
+		top.add_child(_label("%s  •  %s" % [o["customer"], _dev_name(o["device"])], 19, TEXT, font_xbold))
+		var st: Array = status_txt[o["status"]]
+		top.add_child(_label(st[0], 13, st[1], font_xbold))
+		info.add_child(top)
+		var q := _label("“%s”" % o["complaint"], 16, Color("d3dde8"))
+		q.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		q.custom_minimum_size = Vector2(420, 0)
+		info.add_child(q)
+		var part: String = FAULTS[o["fault"]]["part"]
+		var extra := ""
+		if part != "" and o["status"] != "new":
+			extra = "   •   Peça em stock: %d" % int(inventory.get(part, 0))
+		info.add_child(_label("Pagamento: %s   •   Prazo: %s%s" % [_eur(float(o["pay"])), _clock_text(float(o["deadline"])), extra], 14, MUTED))
+		var btns := VBoxContainer.new()
+		btns.add_theme_constant_override("separation", 6)
+		h.add_child(btns)
+		if o["status"] == "new":
+			var acc := _small_button("Aceitar", true)
+			acc.pressed.connect(func() -> void: _accept_order(o))
+			btns.add_child(acc)
+			var dec := _small_button("Recusar", false)
+			dec.pressed.connect(func() -> void: _decline_order(o))
+			btns.add_child(dec)
+		elif o["status"] == "accepted":
+			btns.add_child(_label("Bancada ocupada", 13, MUTED))
+		board_box.add_child(card)
+
+
+func _fill_shop() -> void:
+	board_box.add_child(_label("Entrega expresso: as peças chegam de imediato à prateleira.", 15, MUTED))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	board_box.add_child(grid)
+	for key in Data.PARTS.keys():
+		var pinfo: Dictionary = Data.PARTS[key]
+		var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(14, 10, 14, 10))
+		card.mouse_filter = Control.MOUSE_FILTER_PASS
+		card.custom_minimum_size = Vector2(355, 0)
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		card.add_child(h)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(_label(str(pinfo["name"]), 17, TEXT, font_xbold))
+		info.add_child(_label("%s   •   Em stock: %d" % [_eur(float(pinfo["price"])), int(inventory.get(key, 0))], 14, MUTED))
+		h.add_child(info)
+		var buy := _small_button("Comprar", true)
+		var k: String = key
+		buy.disabled = money < float(pinfo["price"])
+		buy.pressed.connect(func() -> void: _buy_part(k))
+		h.add_child(buy)
+		grid.add_child(card)
+
+
+func _buy_part(key: String) -> void:
+	var price := float(Data.PARTS[key]["price"])
+	if money < price:
+		_toast("Dinheiro insuficiente.", true)
+		return
+	money -= price
+	day_profit -= price
+	inventory[key] = int(inventory.get(key, 0)) + 1
+	_toast("Comprado: %s (-%s)" % [Data.PARTS[key]["name"], _eur(price)], false, GREEN)
+	_refresh_board()
+
+
+func _small_button(text: String, primary: bool) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(110, 36)
+	b.add_theme_font_override("font", font_xbold)
+	b.add_theme_font_size_override("font_size", 16)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = YELLOW if primary else Color(0.14, 0.2, 0.29, 1)
+	sb.set_corner_radius_all(9)
+	var hv := sb.duplicate() as StyleBoxFlat
+	hv.bg_color = sb.bg_color.lightened(0.15)
+	var ds := sb.duplicate() as StyleBoxFlat
+	ds.bg_color = Color(0.2, 0.22, 0.25, 1)
+	b.add_theme_stylebox_override("normal", sb)
+	b.add_theme_stylebox_override("hover", hv)
+	b.add_theme_stylebox_override("pressed", hv)
+	b.add_theme_stylebox_override("disabled", ds)
+	b.add_theme_color_override("font_color", Color("10161d") if primary else TEXT)
+	b.add_theme_color_override("font_hover_color", Color("10161d") if primary else TEXT)
+	return b
 
 
 # --- tool wheel -----------------------------------------------------------------
@@ -2010,6 +2494,7 @@ func _show_menu() -> void:
 	pause_root.hide()
 	wheel_root.hide()
 	popup_root.hide()
+	board_root.hide()
 	hand.visible = false
 	load_button.disabled = not _has_save()
 	(load_button.get_meta("label") as Label).modulate.a = 1.0 if _has_save() else 0.45
@@ -2024,14 +2509,18 @@ func _new_game() -> void:
 	level = 1
 	repaired = 0
 	day_profit = 0
-	_spawn_device("laptop")
-	_spawn_device("phone")
+	ratings = []
+	inventory = {"battery": 1, "phone_screen": 1}
+	_reset_jobs()
+	orders.clear()
 	_save_game()
 	_start_game(true)
 
 
 func _continue_game() -> void:
 	if _load_game():
+		_reset_jobs()
+		orders.clear()
 		_start_game(false)
 
 
@@ -2053,11 +2542,16 @@ func _start_game(first: bool) -> void:
 		repair_panel.hide()
 		hints_bar.hide()
 		_hotbar_compact(false)
-		focus_job = "laptop"
+		focus_job = ""
+		next_order_at = _abs_minutes() + 40.0
+		_new_order(true)
+		_new_order(true)
 		_refresh_objective()
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		if first:
-			_toast("Bem-vindo à oficina! Olha para o portátil e carrega E.", false, YELLOW))
+			_toast("Bem-vindo à oficina! Tens clientes à espera: carrega P para ver os pedidos.", false, YELLOW)
+		else:
+			_toast("Bem-vindo de volta! Carrega P para ver os pedidos.", false, YELLOW))
 	tw.tween_property(fade, "color:a", 0.0, 0.5)
 
 
