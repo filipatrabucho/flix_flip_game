@@ -270,7 +270,7 @@ func _build_hand() -> void:
 			if id == "air":
 				t.position = Vector3(0.0, 0.03, -0.014)
 			elif id == "brush":
-				t.position = Vector3(0.0, 0.03, 0.0)
+				t.position = Vector3(0.0, -0.035, 0.0)
 			elif id == "multimeter":
 				t.position = Vector3(0.0, 0.0, 0.0)
 				(t.get_node("Body") as Node3D).visible = false
