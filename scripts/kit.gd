@@ -494,7 +494,7 @@ static func sphere_shape(r: float) -> SphereShape3D:
 
 ## Lathe-like organic mesh: profile = [Vector3(y, radius_x, radius_z), ...] from bottom to top.
 ## Elliptical rings give smooth bodies, limbs and heads. Caps close both ends.
-static func lathe_mesh(profile: Array, segs := 24, z_offset: Array = []) -> ArrayMesh:
+static func lathe_mesh(profile: Array, segs := 24, z_offset: Array = [], caps := true) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var rings: Array = []
@@ -532,7 +532,7 @@ static func lathe_mesh(profile: Array, segs := 24, z_offset: Array = []) -> Arra
 			var uv: Array[Vector2] = [Vector2(float(s) / segs, float(i) / n), Vector2(float(s + 1) / segs, float(i) / n), Vector2(float(s + 1) / segs, float(i + 1) / n), Vector2(float(s) / segs, float(i + 1) / n)]
 			_quad(st, v, nn, uv)
 	# caps
-	for cap in [0, n - 1]:
+	for cap in ([0, n - 1] if caps else []):
 		var pr: Vector3 = profile[cap]
 		if pr.y < 0.0005 and pr.z < 0.0005:
 			continue

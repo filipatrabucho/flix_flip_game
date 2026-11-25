@@ -562,11 +562,6 @@ func _decor() -> void:
 		Kit.cyl(root, 0.003, 0.004, Kit.chrome(), Vector3(0.53 + rng.randf() * 0.18, BENCH_Y + 0.016, -1.64 + rng.randf() * 0.08))
 	Kit.cyl(root, 0.03, 0.03, Kit.mat(Color("b0b6bc"), 0.3, 0.9), Vector3(0.84, BENCH_Y + 0.015, -1.42), Vector3(0, 0, 0), -1.0, 24)
 	Kit.cyl(root, 0.034, 0.004, Kit.plastic(Color("1a1a1a"), 0.4), Vector3(0.84, BENCH_Y + 0.032, -1.42))
-	# loose PCB
-	var pcb := Kit.plastic(Color("1e6b3a"), 0.4)
-	Kit.slab(root, Vector3(0.12, 0.0016, 0.08), 0.003, 0.0005, pcb, null, null, Vector3(-0.9, BENCH_Y + 0.0008, -1.2), Vector3(0, 25, 0))
-	for i in range(5):
-		Kit.box(root, Vector3(0.012, 0.003, 0.012), Kit.plastic(Color("111111"), 0.3), Vector3(-0.94 + i * 0.02, BENCH_Y + 0.003, -1.2 + (i % 2) * 0.02))
 	# charger cable curling across the bench
 	var cable := Kit.tube_mesh(Kit.bezier(Vector3(0.55, BENCH_Y + 0.003, -1.6), Vector3(0.35, BENCH_Y + 0.003, -1.62), Vector3(0.62, BENCH_Y + 0.003, -1.45), Vector3(0.44, BENCH_Y + 0.003, -1.48), 20), 0.0025, 8)
 	Kit.mi(root, cable, Kit.plastic(Color("ecf0f1"), 0.4))
@@ -785,3 +780,98 @@ func relabel() -> void:
 		door_sign.text = I18n.t("ABERTO")
 	if tablet_label:
 		tablet_label.text = I18n.t("PEDIDOS  [P]")
+
+
+# -----------------------------------------------------------------------------
+# Upgrade props
+# -----------------------------------------------------------------------------
+var upgrade_nodes: Dictionary = {}
+
+
+func add_upgrade(id: String) -> void:
+	if upgrade_nodes.has(id):
+		return
+	var n := Node3D.new()
+	n.name = "Upgrade_" + id
+	root.add_child(n)
+	upgrade_nodes[id] = n
+	match id:
+		"screwdriver":
+			# electric screwdriver on a charging dock (bench, back right)
+			n.position = Vector3(0.36, BENCH_Y, -1.62)
+			Kit.slab(n, Vector3(0.07, 0.025, 0.07), 0.015, 0.008, Kit.plastic(Color("1b1d21"), 0.4), null, null, Vector3(0, 0.0125, 0))
+			Kit.cyl(n, 0.017, 0.12, Kit.plastic(Color("f2b316"), 0.35), Vector3(0, 0.085, 0))
+			Kit.cyl(n, 0.019, 0.04, Kit.rubber(), Vector3(0, 0.1, 0))
+			Kit.cyl(n, 0.003, 0.05, Kit.chrome(), Vector3(0, 0.17, 0))
+			Kit.box(n, Vector3(0.012, 0.004, 0.003), Kit.emissive(Color("2ecc71"), 2.0), Vector3(0, 0.02, 0.036))
+		"lamp":
+			if lamp_light:
+				lamp_light.light_color = Color("f4f8ff")
+				lamp_light.light_energy = 4.6
+			n.position = Vector3(-0.42, 1.38, -1.22)
+			Kit.torus(n, 0.07, 0.078, Kit.emissive(Color("eaf4ff"), 4.0, true), Vector3(0, -0.12, 0)).scale = Vector3(1, 0.3, 1)
+		"coffee":
+			n.position = Vector3(-0.2, COUNTER_TOP, COUNTER_Z - 0.18)
+			var m := Kit.mat(Color("2b2f36"), 0.35, 0.6)
+			Kit.slab(n, Vector3(0.18, 0.28, 0.22), 0.02, 0.01, m, null, null, Vector3(0, 0.14, 0))
+			Kit.slab(n, Vector3(0.14, 0.02, 0.12), 0.01, 0.005, Kit.chrome(), null, null, Vector3(0, 0.01, 0.05))
+			Kit.cyl(n, 0.03, 0.06, Kit.plastic(Color("f2efe9"), 0.3), Vector3(0, 0.05, 0.07))
+			Kit.box(n, Vector3(0.05, 0.02, 0.01), Kit.emissive(Color("ff8a3c"), 2.0), Vector3(0, 0.24, 0.111))
+			Kit.cyl(n, 0.02, 0.03, Kit.chrome(), Vector3(0, 0.1, 0.09))
+		"speaker":
+			n.position = Vector3(1.25, COUNTER_TOP, COUNTER_Z - 0.2)
+			var sp := Kit.fabric(Color("2a2e35"), 0.9, 0.5, 60.0)
+			Kit.slab(n, Vector3(0.14, 0.24, 0.13), 0.03, 0.02, sp, null, null, Vector3(0, 0.12, 0), Vector3(0, -25, 0))
+			Kit.cyl(n, 0.045, 0.004, Kit.mat(Color("15171a"), 0.5), Vector3(0.0, 0.15, 0.06), Vector3(90, -25, 0))
+			Kit.box(n, Vector3(0.08, 0.005, 0.004), Kit.emissive(Color("3aa8ff"), 3.0), Vector3(0.0, 0.03, 0.058))
+		"display":
+			# glass display cabinet next to the door with repaired gadgets
+			n.position = Vector3(-1.9, 0, 2.15)
+			var frame := Kit.mat(Color("1d2a38"), 0.4, 0.5)
+			Kit.box(n, Vector3(0.9, 0.8, 0.45), frame, Vector3(0, 0.4, 0))
+			Kit.box(n, Vector3(0.86, 0.9, 0.41), Kit.glass(Color(0.85, 0.92, 1.0), 0.03, 0.15), Vector3(0, 1.25, 0))
+			for y in [0.82, 1.2, 1.6]:
+				Kit.box(n, Vector3(0.86, 0.012, 0.41), Kit.glass(Color(0.9, 0.95, 1.0), 0.03, 0.3), Vector3(0, y, 0))
+			Kit.box(n, Vector3(0.9, 0.04, 0.45), frame, Vector3(0, 1.72, 0))
+			Kit.box(n, Vector3(0.8, 0.01, 0.01), Kit.emissive(Color("fff0d2"), 3.0, true), Vector3(0, 1.69, 0.18))
+			Kit.slab(n, Vector3(0.28, 0.015, 0.2), 0.01, 0.004, Kit.aluminium(Color("7a8189"), 0.34), null, null, Vector3(-0.2, 0.84, 0))
+			Kit.slab(n, Vector3(0.07, 0.008, 0.14), 0.01, 0.002, Kit.black_glass(), Kit.aluminium(Color("4a5a6e"), 0.22), null, Vector3(0.2, 0.84, 0), Vector3(0, 20, 0))
+			Kit.slab(n, Vector3(0.12, 0.024, 0.068), 0.026, 0.008, Kit.plastic(Color("e9ecef"), 0.4), null, null, Vector3(0.0, 1.22, 0))
+			Kit.slab(n, Vector3(0.26, 0.17, 0.12), 0.02, 0.01, Kit.pbr("walnut_pbr", 0.4, 0.0, Color("c88f5c"), Vector3(3, 3, 3), true), null, null, Vector3(-0.1, 1.29, 0), Vector3(90, 0, 0))
+			var light := OmniLight3D.new()
+			light.position = Vector3(0, 1.5, 0.4)
+			light.light_color = Color("fff0d2")
+			light.light_energy = 0.7
+			light.omni_range = 1.4
+			n.add_child(light)
+		"neon":
+			n.position = Vector3(-0.9, 2.15, ROOM_FRONT - 0.03)
+			var l := Label3D.new()
+			l.text = I18n.t("REPARAÇÕES")
+			l.font_size = 120
+			l.pixel_size = 0.0011
+			l.modulate = Color(2.4, 0.5, 1.6)
+			l.outline_modulate = Color(1.0, 0.1, 0.6, 0.85)
+			l.outline_size = 18
+			l.shaded = false
+			l.rotation_degrees = Vector3(0, 180, 0)
+			var f := load("res://assets/fonts/Nunito-ExtraBold.ttf")
+			if f:
+				l.font = f
+			n.add_child(l)
+			var o := OmniLight3D.new()
+			o.light_color = Color("ff4fb3")
+			o.light_energy = 1.2
+			o.omni_range = 2.0
+			o.position = Vector3(0, 0, -0.3)
+			n.add_child(o)
+
+
+func clear_upgrades() -> void:
+	for n in upgrade_nodes.values():
+		if is_instance_valid(n):
+			n.queue_free()
+	upgrade_nodes.clear()
+	if lamp_light:
+		lamp_light.light_color = Color("ffe2b5")
+		lamp_light.light_energy = 3.4

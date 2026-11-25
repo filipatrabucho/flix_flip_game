@@ -23,6 +23,7 @@ var _outline: ShaderMaterial
 var _outline_soft: ShaderMaterial
 var _t := 0.0
 var busy := false
+static var anim_speed := 1.0
 
 
 func _init() -> void:
@@ -214,6 +215,7 @@ func _screen_material() -> StandardMaterial3D:
 
 func tw() -> Tween:
 	var t := create_tween()
+	t.set_speed_scale(anim_speed)
 	t.set_trans(Tween.TRANS_CUBIC)
 	t.set_ease(Tween.EASE_IN_OUT)
 	return t
@@ -274,7 +276,7 @@ func anim_unscrew(screw: Node3D, tray_global: Vector3, axis_local := Vector3.UP)
 	var lift := axis_local.normalized() * 0.006
 	t.tween_property(screw, "position", start + lift, 0.55).set_trans(Tween.TRANS_LINEAR)
 	var spinner: Node3D = screw.get_node("Spin")
-	var spin := create_tween()
+	var spin := tw()
 	spin.tween_property(spinner, "rotation:y", spinner.rotation.y - TAU * 3.0, 0.55)
 	t.tween_callback(func() -> void:
 		var gt := screw.global_transform

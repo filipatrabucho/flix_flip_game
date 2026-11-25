@@ -7,6 +7,11 @@ const Room = preload("res://scripts/room.gd")
 const Laptop = preload("res://scripts/laptop.gd")
 const Phone = preload("res://scripts/phone.gd")
 const Gamepad = preload("res://scripts/gamepad.gd")
+const ConsoleDev = preload("res://scripts/console.gd")
+const HandheldDev = preload("res://scripts/handheld.gd")
+const RotaryDev = preload("res://scripts/rotary_phone.gd")
+const RadioDev = preload("res://scripts/radio.gd")
+const DeviceBase = preload("res://scripts/device_base.gd")
 const Data = preload("res://scripts/jobs_data.gd")
 const I18n = preload("res://scripts/i18n.gd")
 const Story = preload("res://scripts/story_data.gd")
@@ -40,17 +45,24 @@ const NEW_SCREEN_POS := Vector3(0.475, MAT_Y + 0.0002, -1.2)
 const OLD_SCREEN_ASIDE := Vector3(0.47, MAT_Y + 0.0003, -1.42)
 
 const TOOL_SPOTS := {
-	"screwdriver": [Vector3(0.66, 0.92, -1.04), -32.0],
-	"brush": [Vector3(0.70, 0.92, -1.27), 12.0],
-	"air": [Vector3(0.86, 0.92, -1.48), 0.0],
-	"cloth": [Vector3(-0.60, 0.92, -1.40), 18.0],
-	"multimeter": [Vector3(-0.63, 0.92, -1.14), 16.0],
+	"screwdriver": [Vector3(0.66, 0.92, -1.02), -32.0],
+	"brush": [Vector3(0.78, 0.92, -1.05), 12.0],
+	"air": [Vector3(0.92, 0.92, -1.2), 0.0],
+	"cloth": [Vector3(0.66, 0.92, -1.30), 18.0],
+	"multimeter": [Vector3(0.86, 0.92, -1.38), -10.0],
 }
 
 const GAMEPAD_POS := Vector3(0.33, MAT_Y, -1.02)
 const SLOT_POS := {"laptop": [LAPTOP_POS, 4.0], "phone": [PHONE_POS, -12.0], "gamepad": [GAMEPAD_POS, 8.0]}
 const PART_POS := {"laptop": NEW_BATTERY_POS, "phone": NEW_SCREEN_POS, "gamepad": Vector3(0.50, MAT_Y + 0.0002, -1.02)}
 const COVER_ASIDE_BY := {"laptop": COVER_ASIDE, "gamepad": Vector3(0.10, MAT_Y + 0.0002, -0.99)}
+## Bench spots: position, yaw, size class, where removed covers go and where spare parts appear.
+const SPOTS := {
+	"A": {"pos": Vector3(-0.12, MAT_Y, -1.22), "yaw": 4.0, "size": "L", "cover": Vector3(-0.15, MAT_Y + 0.001, -1.56), "part": Vector3(0.145, MAT_Y + 0.0002, -1.24)},
+	"C": {"pos": Vector3(-0.72, 0.92, -1.30), "yaw": 8.0, "size": "L", "cover": Vector3(-0.74, 0.921, -1.03), "part": Vector3(-0.40, MAT_Y + 0.0002, -1.04)},
+	"B": {"pos": Vector3(0.29, MAT_Y, -1.17), "yaw": -12.0, "size": "S", "cover": Vector3(0.47, MAT_Y + 0.0003, -1.42), "part": Vector3(0.475, MAT_Y + 0.0002, -1.2)},
+	"D": {"pos": Vector3(0.33, MAT_Y, -1.02), "yaw": 8.0, "size": "S", "cover": Vector3(0.12, MAT_Y + 0.0002, -0.99), "part": Vector3(0.50, MAT_Y + 0.0002, -1.02)},
+}
 
 # --- world --------------------------------------------------------------------
 var room: Room
@@ -83,6 +95,7 @@ var order_seq := 0
 var FAULTS: Dictionary = Data.faults()
 var customers: Dictionary = {}         # order id -> customer node
 var counter_queue: Array = []
+var upgrades: Dictionary = {}          # upgrade id -> true
 var story_chapter := 0
 var story_deliveries := 0
 var story_flags: Dictionary = {}
@@ -315,21 +328,50 @@ func _dev_name(id: String) -> String:
 	return T(str(Data.DEVICES[id]["name"]))
 
 
-## Puts a customer's device on its bench slot, set up for its fault.
+func _free_spot(device: String) -> String:
+	var size: String = Data.SIZE.get(device, "S")
+	var used: Array = []
+	for j in jobs.values():
+		used.append(j.get("spot", ""))
+	var order := ["A", "C"] if size == "L" else ["B", "D", "A", "C"]
+	if device == "laptop":
+		order = ["A", "C"]
+	for sp in order:
+		if not used.has(sp):
+			return sp
+	return ""
+
+
+func _spot(id: String) -> Dictionary:
+	return SPOTS[jobs[id].get("spot", "A")]
+
+
+## Puts a customer's device on a free bench spot, set up for its fault.
 func _spawn_device(id: String, order: Dictionary) -> void:
 	if devices.has(id) and is_instance_valid(devices[id]):
 		devices[id].queue_free()
+	var spot_key := _free_spot(id)
+	if spot_key == "":
+		spot_key = "A"
 	var d: Node3D
 	match id:
 		"laptop":
 			d = Laptop.new()
 		"phone":
 			d = Phone.new()
+		"console":
+			d = ConsoleDev.new()
+		"handheld":
+			d = HandheldDev.new()
+		"rotary":
+			d = RotaryDev.new()
+		"radio":
+			d = RadioDev.new()
 		_:
 			d = Gamepad.new()
-	var slot: Array = SLOT_POS[id]
-	d.position = slot[0]
-	d.rotation_degrees.y = slot[1]
+	var spot: Dictionary = SPOTS[spot_key]
+	d.position = spot["pos"]
+	d.rotation_degrees.y = spot["yaw"]
 	add_child(d)
 	devices[id] = d
 	d.set_pickable(true)
@@ -338,7 +380,9 @@ func _spawn_device(id: String, order: Dictionary) -> void:
 		d.set_dirty(fk == "laptop_battery" or fk == "laptop_fan")
 	elif id == "phone" and fk != "phone_screen":
 		d.set_screen_ok()
-	jobs[id] = {"order": order, "fault": fk, "step": 0, "progress": 0, "diagnosed": false, "done": false, "used": []}
+	elif d.has_method("set_dirty"):
+		d.set_dirty(fk in ["console_overheat", "rotary_bell", "radio_static"])
+	jobs[id] = {"order": order, "fault": fk, "step": 0, "progress": 0, "diagnosed": false, "done": false, "used": [], "spot": spot_key}
 	order["status"] = "repair"
 
 
@@ -493,8 +537,10 @@ func _handle_key(e: InputEventKey) -> void:
 			_dialog_advance()
 		return
 	if mode == "board":
-		if k == KEY_ESCAPE or (k == KEY_P and board_kind == "orders") or (k == KEY_L and board_kind == "shop"):
+		if k == KEY_ESCAPE or (k == KEY_P and board_kind == "orders") or (k == KEY_L and board_kind == "shop") or (k == KEY_U and board_kind == "upgrades"):
 			_close_board()
+		elif k == KEY_U:
+			_open_board("upgrades")
 		elif k == KEY_P:
 			_open_board("orders")
 		elif k == KEY_L:
@@ -517,6 +563,8 @@ func _handle_key(e: InputEventKey) -> void:
 		_open_board("orders")
 	elif k == KEY_L:
 		_open_board("shop")
+	elif k == KEY_U:
+		_open_board("upgrades")
 	elif k >= KEY_1 and k <= KEY_5:
 		var id: String = Tools.IDS[k - KEY_1]
 		_equip(id if tool != id else "none")
@@ -782,7 +830,7 @@ func _ensure_part(id: String, step: Dictionary) -> void:
 		return
 	if int(inventory.get(part, 0)) > 0:
 		inventory[part] = int(inventory[part]) - 1
-		d.spawn_part(part, PART_POS[id])
+		d.spawn_part(part, _spot(id)["part"])
 		_toast(T("Tiraste do stock: %s") % T(Data.PARTS[part]["name"]), false, GREEN)
 	else:
 		_toast(T("Falta a peça: %s. Compra-a na Loja (L).") % T(Data.PARTS[part]["name"]), true)
@@ -860,7 +908,7 @@ func _inspect_click() -> void:
 		return
 	var target := hovered_target
 	d.set_hover("")
-	var dur := _perform(id, str(step["act"]), target)
+	var dur := _perform(id, str(step["act"]), target) / DeviceBase.anim_speed
 	_hand_action(dur)
 	var used: Array = jobs[id].get("used", [])
 	used.append(target)
@@ -971,7 +1019,7 @@ func _perform(id: String, act: String, target: String) -> float:
 			d.screw_in(idx2)
 			return 0.85
 		"remove_cover":
-			d.remove_cover(COVER_ASIDE_BY.get(id, COVER_ASIDE))
+			d.remove_cover(_spot(id)["cover"] + (Vector3(0, -0.0056, 0) if id == "laptop" else Vector3.ZERO))
 			return 1.2
 		"replace_cover":
 			d.replace_cover()
@@ -1008,7 +1056,7 @@ func _perform(id: String, act: String, target: String) -> float:
 			d.open_screen()
 			return 1.1
 		"remove_screen":
-			d.remove_old_screen(OLD_SCREEN_ASIDE)
+			d.remove_old_screen(_spot(id)["cover"])
 			return 1.25
 		"install_screen":
 			d.install_new_screen()
@@ -1051,6 +1099,98 @@ func _perform(id: String, act: String, target: String) -> float:
 			get_tree().create_timer(0.4).timeout.connect(func() -> void:
 				_toast(T("Os botões estão como novos! Reparação concluída."), false, GREEN))
 			return 0.8
+		"clean":
+			if d.dust:
+				_dust_puff(d.dust.global_position)
+			if d.clean():
+				_toast(T("Está limpo!"), false, GREEN)
+			return 0.65
+		"power_flash_off":
+			d.power(false)
+			jobs[id]["diagnosed"] = true
+			get_tree().create_timer(1.0).timeout.connect(func() -> void:
+				_toast(T("Liga e desliga-se logo, a ferver e cheia de pó. Avaria: SOBREAQUECIMENTO"), false, GREEN))
+			return 1.4
+		"power_drive":
+			d.power(true)
+			jobs[id]["diagnosed"] = true
+			get_tree().create_timer(1.0).timeout.connect(func() -> void:
+				d.set_led(false)
+				_toast(T("Liga, mas o leitor só faz cliques. Avaria: LEITOR DE DISCOS"), false, GREEN))
+			return 1.4
+		"power_none":
+			_toast(T("Nada... nem uma luz. Vamos medir a porta."))
+			return 0.8
+		"power_ok", "power_ok_quiet":
+			d.power(true)
+			if d.screen_label:
+				d.show_message(T("FX POCKET\nPronto a jogar!"), Color("8fd8ff"), 2.5)
+			if act == "power_ok":
+				get_tree().create_timer(0.8).timeout.connect(func() -> void:
+					_toast(T("Funciona perfeitamente! Reparação concluída."), false, GREEN))
+			return 1.2
+		"buttons_stuck":
+			jobs[id]["diagnosed"] = true
+			_toast(T("Os botões rangem e ficam presos — areia. Avaria: BOTÕES"), false, GREEN)
+			return 0.8
+		"buttons_ok":
+			_toast(T("Os botões estão como novos! Reparação concluída."), false, GREEN)
+			return 0.8
+		"ring_fail":
+			d.ring(false)
+			_toast(T("Há sinal de linha, mas a campainha não dá um pio."))
+			return 1.0
+		"dial_ok_diag":
+			d.spin_dial()
+			jobs[id]["diagnosed"] = true
+			get_tree().create_timer(1.0).timeout.connect(func() -> void:
+				_toast(T("O disco marca bem. O problema é a campainha. Avaria: CAMPAINHA"), false, GREEN))
+			return 1.4
+		"ring_ok":
+			d.ring(true)
+			get_tree().create_timer(0.6).timeout.connect(func() -> void:
+				_sfx("bell")
+				_toast(T("Trrrim! Toca como antigamente. Reparação concluída."), false, GREEN))
+			return 1.2
+		"hook_tone":
+			d.ring(false)
+			_toast(T("Há sinal de linha."))
+			return 0.8
+		"dial_stuck":
+			jobs[id]["diagnosed"] = true
+			_toast(T("O disco encrava a meio — pó e gordura velha. Avaria: DISCO PRESO"), false, GREEN)
+			return 0.8
+		"dial_ok":
+			d.spin_dial()
+			get_tree().create_timer(1.0).timeout.connect(func() -> void:
+				_toast(T("O disco gira suave e volta ao sítio. Reparação concluída."), false, GREEN))
+			return 1.4
+		"radio_dead":
+			d.set_tubes(true, 2)
+			_toast(T("A luz acende... mas não sai som."))
+			return 1.0
+		"tune_silent":
+			d.tune()
+			jobs[id]["diagnosed"] = true
+			get_tree().create_timer(1.0).timeout.connect(func() -> void:
+				_toast(T("Nem um chiado — uma das válvulas não acende. Avaria: VÁLVULA"), false, GREEN))
+			return 1.2
+		"radio_static":
+			d.set_tubes(true)
+			_toast(T("Liga, mas só se ouve chiado..."))
+			return 1.0
+		"tune_crackle":
+			d.tune()
+			jobs[id]["diagnosed"] = true
+			get_tree().create_timer(1.0).timeout.connect(func() -> void:
+				_toast(T("O chiado piora ao rodar — sintonia suja. Avaria: SINTONIA"), false, GREEN))
+			return 1.2
+		"radio_on":
+			d.set_tubes(true)
+			d.tune()
+			get_tree().create_timer(0.8).timeout.connect(func() -> void:
+				_toast(T("Música clara como cristal! Reparação concluída."), false, GREEN))
+			return 1.2
 	return 0.4
 
 
@@ -1068,9 +1208,9 @@ func _act_sound(act: String) -> void:
 			_sfx("wipe")
 		"measure":
 			_sfx("beep")
-		"power_on", "pad_ok", "pad_test", "test_ok":
+		"power_on", "pad_ok", "pad_test", "test_ok", "power_ok", "power_ok_quiet", "radio_on", "dial_ok", "buttons_ok":
 			get_tree().create_timer(0.3).timeout.connect(func() -> void: _sfx("power_on"))
-		"power_dead", "power_hot", "power_nodisk", "power_lowbat", "power_nocharge", "power_glitch", "pad_drift", "pad_stuck", "test_fail":
+		"power_dead", "power_hot", "power_nodisk", "power_lowbat", "power_nocharge", "power_glitch", "pad_drift", "pad_stuck", "test_fail", "power_flash_off", "power_drive", "power_none", "ring_fail", "radio_dead", "radio_static", "tune_silent", "tune_crackle", "dial_stuck", "buttons_stuck":
 			get_tree().create_timer(0.5).timeout.connect(func() -> void: _sfx("power_fail", 0.7))
 		_:
 			_sfx("click", 0.6)
@@ -1299,12 +1439,12 @@ func _new_order(silent := false, story_key := "") -> Dictionary:
 		var complaints: Array = FAULTS[fk]["complaints"]
 		complaint = T(complaints[randi() % complaints.size()])
 		var rep_bonus := 0.9 + 0.04 * _reputation()
-		pay = snappedf(float(FAULTS[fk]["pay"]) * randf_range(0.9, 1.2) * rep_bonus * (1.15 if bool(story_flags.get("press", false)) else 1.0), 5.0)
+		pay = snappedf(float(FAULTS[fk]["pay"]) * randf_range(0.9, 1.2) * rep_bonus * (1.15 if bool(story_flags.get("press", false)) else 1.0) * (1.1 if upgrades.has("display") else 1.0), 5.0)
 	order_seq += 1
 	var o := {
 		"id": order_seq, "customer": cust_name, "color": cust_color, "device": FAULTS[fk]["device"], "fault": fk,
 		"complaint": complaint, "pay": pay, "story": story_key,
-		"deadline": _abs_minutes() + randf_range(180, 330), "expires": _abs_minutes() + (9999.0 if story_key != "" else 170.0), "status": "new",
+		"deadline": _abs_minutes() + randf_range(180, 330), "expires": _abs_minutes() + (9999.0 if story_key != "" else (230.0 if upgrades.has("coffee") else 170.0)), "status": "new",
 	}
 	orders.append(o)
 	_spawn_customer(o, "order")
@@ -1323,7 +1463,7 @@ func _order_tick() -> void:
 				pending += 1
 		if pending < 3 and minutes < 18 * 60:
 			_new_order()
-		var rate := clampf(_reputation() / 4.0, 0.7, 1.25) * (1.5 if bool(story_flags.get("press", false)) else 1.0)
+		var rate := clampf(_reputation() / 4.0, 0.7, 1.25) * (1.5 if bool(story_flags.get("press", false)) else 1.0) * (1.3 if upgrades.has("neon") else 1.0)
 		next_order_at = now + randf_range(55, 115) / rate
 	# unanswered requests walk out
 	for o in orders.duplicate():
@@ -1363,7 +1503,7 @@ func _decline_order(o: Dictionary) -> void:
 ## Moves accepted orders onto free bench slots.
 func _place_waiting_orders() -> void:
 	for o in orders:
-		if o["status"] == "accepted" and not jobs.has(o["device"]):
+		if o["status"] == "accepted" and not jobs.has(o["device"]) and _free_spot(str(o["device"])) != "":
 			_spawn_device(o["device"], o)
 			var d: Node3D = devices[o["device"]]
 			d.scale = Vector3(0.01, 0.01, 0.01)
@@ -1388,7 +1528,8 @@ func _job_complete(id: String) -> void:
 func _job_payment(id: String) -> Dictionary:
 	var o: Dictionary = jobs[id]["order"]
 	var on_time := _abs_minutes() <= float(o["deadline"])
-	var tip := snappedf(float(o["pay"]) * (randf_range(0.1, 0.25) if on_time else 0.0), 1.0)
+	var tip_mult := (1.1 if upgrades.has("coffee") else 1.0) * (1.1 if upgrades.has("speaker") else 1.0)
+	var tip := snappedf(float(o["pay"]) * (randf_range(0.1, 0.25) if on_time else 0.0) * tip_mult, 1.0)
 	var stars := 5 if on_time else 3
 	if on_time and _abs_minutes() > float(o["deadline"]) - 30.0:
 		stars = 4
@@ -1895,7 +2036,7 @@ func _save_game() -> void:
 	if f == null:
 		return
 	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inventory,
-		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount}))
+		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount, "upgrades": upgrades}))
 
 
 func _has_save() -> bool:
@@ -1923,6 +2064,13 @@ func _load_game() -> bool:
 	story_flags = data.get("story_flags", {})
 	rent_due_day = int(data.get("rent_due_day", 0))
 	rent_amount = int(data.get("rent_amount", Story.RENT))
+	upgrades = {}
+	var up = data.get("upgrades", {})
+	if up is Dictionary:
+		for k in up.keys():
+			upgrades[k] = true
+	room.clear_upgrades()
+	_apply_upgrades()
 	inventory = {}
 	var inv = data.get("inventory", {})
 	if inv is Dictionary:
@@ -2257,13 +2405,13 @@ func _build_hud(base: Control) -> void:
 	sc.add_theme_constant_override("separation", 10)
 	sc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(sc)
-	for it in [["P", T("Pedidos")], ["L", T("Loja")]]:
+	for it in [["P", "Pedidos"], ["L", "Loja"], ["U", "Melhorias"]]:
 		var pp := _panel(Color(0.04, 0.07, 0.11, 0.88), 10, Vector4(10, 6, 14, 6))
 		var hh := HBoxContainer.new()
 		hh.add_theme_constant_override("separation", 8)
 		pp.add_child(hh)
 		hh.add_child(_keycap(it[0]))
-		hh.add_child(_label(it[1], 17))
+		hh.add_child(_label(T(it[1]), 17))
 		if it[0] == "P":
 			orders_badge = _label("", 15, Color("10161d"), font_xbold)
 			var bp := PanelContainer.new()
@@ -2604,11 +2752,11 @@ func _build_board(base: Control) -> void:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 10)
 	v.add_child(tabs)
-	for t in [["orders", T("Pedidos  (P)")], ["shop", T("Loja de Peças  (L)")]]:
+	for t in [["orders", "Pedidos  (P)"], ["shop", "Loja de Peças  (L)"], ["upgrades", "Melhorias  (U)"]]:
 		var b := Button.new()
-		b.text = t[1]
+		b.text = T(t[1])
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(190, 40)
+		b.custom_minimum_size = Vector2(170, 40)
 		b.add_theme_font_override("font", font_xbold)
 		b.add_theme_font_size_override("font_size", 18)
 		var kind: String = t[0]
@@ -2693,6 +2841,8 @@ func _refresh_board() -> void:
 	(board_root.get_meta("money") as Label).text = T("%s    ★ %.1f") % [_eur(money), _reputation()]
 	if board_kind == "orders":
 		_fill_orders()
+	elif board_kind == "upgrades":
+		_fill_upgrades()
 	else:
 		_fill_shop()
 
@@ -2778,6 +2928,56 @@ func _fill_shop() -> void:
 		buy.pressed.connect(func() -> void: _buy_part(k))
 		h.add_child(buy)
 		grid.add_child(card)
+
+
+func _apply_upgrades() -> void:
+	DeviceBase.anim_speed = (1.35 if upgrades.has("screwdriver") else 1.0) * (1.1 if upgrades.has("lamp") else 1.0)
+	for id in upgrades.keys():
+		room.add_upgrade(id)
+
+
+func _buy_upgrade(key: String) -> void:
+	var price := float(Data.UPGRADES[key]["price"])
+	if upgrades.has(key) or money < price:
+		_toast(T("Dinheiro insuficiente."), true)
+		return
+	money -= price
+	day_profit -= price
+	upgrades[key] = true
+	_apply_upgrades()
+	_sfx("cash", 0.6)
+	_toast(T("Melhoria instalada: %s") % T(Data.UPGRADES[key]["name"]), false, GREEN)
+	_save_game()
+	_refresh_board()
+
+
+func _fill_upgrades() -> void:
+	board_box.add_child(_label(T("Investe na oficina: cada melhoria aparece na loja e tem um efeito permanente."), 15, MUTED))
+	for key in Data.UPGRADES.keys():
+		var u: Dictionary = Data.UPGRADES[key]
+		var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(14, 10, 14, 10))
+		card.mouse_filter = Control.MOUSE_FILTER_PASS
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 12)
+		card.add_child(h)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(_label(T(str(u["name"])), 18, TEXT, font_xbold))
+		var dl := _label(T(str(u["desc"])), 15, MUTED)
+		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		dl.custom_minimum_size = Vector2(480, 0)
+		info.add_child(dl)
+		h.add_child(info)
+		if upgrades.has(key):
+			h.add_child(_label(T("Instalado ✓"), 16, GREEN, font_xbold))
+		else:
+			var buy := _small_button("%s  %s" % [T("Comprar"), _eur(float(u["price"]))], true)
+			buy.custom_minimum_size = Vector2(170, 38)
+			buy.disabled = money < float(u["price"])
+			var k: String = key
+			buy.pressed.connect(func() -> void: _buy_upgrade(k))
+			h.add_child(buy)
+		board_box.add_child(card)
 
 
 func _buy_part(key: String) -> void:
@@ -3154,6 +3354,9 @@ func _new_game() -> void:
 	story_flags = {}
 	rent_due_day = 0
 	rent_amount = Story.RENT
+	upgrades = {}
+	room.clear_upgrades()
+	_apply_upgrades()
 	_reset_jobs()
 	_clear_customers()
 	orders.clear()
