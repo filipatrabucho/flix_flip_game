@@ -521,7 +521,7 @@ func view_transform(view: String) -> Transform3D:
 		"left_side":
 			return _view(Vector3(-0.150, 0.0, -0.035), Vector3(-0.43, 0.13, 0.07))
 		"bottom":
-			return _view(Vector3(0.0, 0.0, 0.01), Vector3(0.05, 0.36, 0.25))
+			return _view(Vector3(0.0, 0.0, 0.01), Vector3(0.05, 0.40, 0.28))
 		"interior":
-			return _view(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.33, 0.21))
+			return _view(Vector3(0.0, 0.0, -0.01), Vector3(0.02, 0.40, 0.26))
 	return _view(Vector3.ZERO, Vector3(0, 0.3, 0.3))
