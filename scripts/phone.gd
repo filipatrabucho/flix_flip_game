@@ -367,13 +367,13 @@ func install_new_screen() -> Tween:
 func view_transform(view: String) -> Transform3D:
 	match view:
 		"overview":
-			return _view(Vector3(0, 0.0, 0.0), Vector3(0.0, 0.20, 0.15))
+			return _view(Vector3(0, 0.0, 0.0), Vector3(0.0, 0.32, 0.22))
 		"front":
-			return _view(Vector3(0, 0.0, 0.004), Vector3(0.0, 0.175, 0.11))
+			return _view(Vector3(-0.012, 0.0, -0.005), Vector3(-0.02, 0.30, 0.17))
 		"bottom_edge":
-			return _view(Vector3(0, 0.0, L * 0.5), Vector3(0.012, 0.065, L * 0.5 + 0.105))
+			return _view(Vector3(-0.006, 0.0, L * 0.5 - 0.01), Vector3(0.0, 0.11, L * 0.5 + 0.17))
 		"open":
-			return _view(Vector3(0.02, 0.0, 0.0), Vector3(0.015, 0.20, 0.12))
+			return _view(Vector3(0.025, 0.02, 0.0), Vector3(0.0, 0.33, 0.19))
 		"side":
 			return _view(Vector3(W * 0.5, 0.0, -0.02), Vector3(0.15, 0.08, 0.04))
 	return _view(Vector3.ZERO, Vector3(0, 0.2, 0.2))
