@@ -1241,7 +1241,7 @@ func _new_order(silent := false, story_key := "") -> Dictionary:
 		var so: Dictionary = Story.STORY_ORDERS[story_key]
 		var ch: Dictionary = Story.CHARACTERS[story_key]
 		fk = so["fault"]
-		cust_name = ch["name"]
+		cust_name = T(str(ch["name"]))
 		cust_color = ch["color"]
 		complaint = I18n.pick(so["complaint"])
 		pay = float(so["pay"])
