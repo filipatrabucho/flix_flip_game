@@ -672,8 +672,11 @@ func _activate_step_targets() -> void:
 	var d: Node3D = devices[id]
 	var remaining: Array = []
 	var done_list: Array = jobs[id].get("used", [])
-	for t in step["targets"]:
-		if not done_list.has(t):
+	var targets: Array = step["targets"]
+	# repeated actions on one target (cleaning, wiping) keep it active
+	var repeat_same := targets.size() < int(step.get("need", 1))
+	for t in targets:
+		if repeat_same or not done_list.has(t):
 			remaining.append(t)
 	d.set_active_targets(remaining)
 
@@ -1583,6 +1586,7 @@ func _flash_needed_slot(allowed) -> void:
 
 func _set_hints(items: Array) -> void:
 	for c in hints_bar.get_children():
+		hints_bar.remove_child(c)
 		c.queue_free()
 	for it in items:
 		var p := _panel(Color(0.04, 0.07, 0.11, 0.88), 10, Vector4(12, 6, 14, 6))
