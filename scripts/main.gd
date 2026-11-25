@@ -43,7 +43,7 @@ const TOOL_SPOTS := {
 	"multimeter": [Vector3(-0.63, 0.92, -1.14), 16.0],
 }
 
-const GAMEPAD_POS := Vector3(0.33, MAT_Y, -0.99)
+const GAMEPAD_POS := Vector3(0.33, MAT_Y, -1.02)
 const SLOT_POS := {"laptop": [LAPTOP_POS, 4.0], "phone": [PHONE_POS, -12.0], "gamepad": [GAMEPAD_POS, 8.0]}
 const PART_POS := {"laptop": NEW_BATTERY_POS, "phone": NEW_SCREEN_POS, "gamepad": Vector3(0.50, MAT_Y + 0.0002, -1.02)}
 const COVER_ASIDE_BY := {"laptop": COVER_ASIDE, "gamepad": Vector3(0.10, MAT_Y + 0.0002, -0.99)}

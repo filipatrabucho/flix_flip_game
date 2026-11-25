@@ -245,7 +245,7 @@ func replace_cover() -> Tween:
 func view_transform(view: String) -> Transform3D:
 	match view:
 		"overview", "front":
-			return _view(Vector3(0, 0.0, 0.01), Vector3(0.0, 0.27, 0.19))
+			return _view(Vector3(-0.01, 0.0, 0.0), Vector3(-0.02, 0.36, 0.25))
 		"bottom", "interior":
-			return _view(Vector3(0, 0.0, 0.0), Vector3(0.02, 0.27, 0.18))
+			return _view(Vector3(-0.01, 0.0, 0.0), Vector3(0.0, 0.36, 0.24))
 	return _view(Vector3.ZERO, Vector3(0, 0.27, 0.2))
