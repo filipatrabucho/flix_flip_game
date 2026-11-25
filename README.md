@@ -1,4 +1,4 @@
-# Fix & Flip Tech — v0.8
+# Fix & Flip Tech — v0.9
 
 Simulador de oficina de eletrónica em **Godot 4** (Forward+). Compra equipamentos avariados, repara-os passo a passo com as mãos (de luva) e ferramentas reais, e revende com lucro.
 
@@ -20,12 +20,29 @@ Simulador de oficina de eletrónica em **Godot 4** (Forward+). Compra equipament
 - **HUD igual às referências**: Dia e hora, dinheiro, nível e XP, painel "Objetivo Atual", barra de ferramentas 1–5, aviso "E Interagir", painel "Reparação: …" com os passos e dicas de teclas.
 - **Roda de ferramentas (TAB)**: Chave de Fendas, Ar Comprimido, Multímetro, Pano de Microfibra e Pincel.
 
+## Clientes, pedidos e loja (v0.9)
+
+- Ao longo do dia chegam **clientes** com o equipamento avariado e uma queixa ("Faz um barulho enorme e desliga-se sozinho"). Abre os **Pedidos (P)** para aceitar ou recusar. Cada pedido mostra o pagamento e o prazo.
+- O equipamento aceite vai para a bancada (um lugar para portátil, um para telemóvel e um para comando). Os restantes ficam em fila.
+- Ao entregar recebes o pagamento, uma **gorjeta** se cumprires o prazo e uma **avaliação ★**. A reputação aumenta o pagamento e a frequência dos clientes.
+- **Loja de Peças (L)**: compra baterias, ecrãs, ventoinhas, SSD e módulos analógicos. A peça sai do stock quando a vais instalar.
+
+**Equipamentos e avarias:**
+
+| Equipamento | Avarias |
+| --- | --- |
+| Portátil | Bateria, Sobreaquecimento (ventoinha), Disco SSD |
+| Telemóvel | Ecrã partido, Bateria inchada, Porta de carregamento suja |
+| Comando | Drift do analógico, Botões presos |
+
 ## Controlos
 
 | Tecla | Ação |
 | --- | --- |
 | WASD + rato | Andar e olhar |
 | E | Interagir (reparar / pegar ferramenta) |
+| P | Pedidos dos clientes |
+| L | Loja de peças |
 | 1–5 / roda do rato | Escolher ferramenta |
 | Q | Mão livre |
 | TAB | Roda de ferramentas |
