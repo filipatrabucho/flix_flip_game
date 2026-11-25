@@ -2989,6 +2989,7 @@ func _rebuild_ui() -> void:
 		ui.queue_free()
 	ui = null
 	hotbar_slots.clear()
+	room.relabel()
 	_build_ui()
 	_show_menu()
 	_show_menu_panel("settings")

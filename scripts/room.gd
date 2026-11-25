@@ -25,6 +25,8 @@ var probe: ReflectionProbe
 var spot_lights: Array[Light3D] = []
 var door: Node3D
 var bell: Node3D
+var door_sign: Label3D
+var tablet_label: Label3D
 var rng := RandomNumberGenerator.new()
 
 
@@ -683,6 +685,7 @@ func _counter() -> void:
 	tl.position = Vector3(x1 - 0.3, COUNTER_TOP + 0.03, z - 0.05)
 	tl.rotation_degrees = Vector3(-80, -20, 0)
 	root.add_child(tl)
+	tablet_label = tl
 	# small plant + "repaired devices" shelf behind the counter
 	Kit.cyl(root, 0.05, 0.08, Kit.mat(Color("e8e1d6"), 0.6), Vector3(x1 - 0.08, COUNTER_TOP + 0.04, z + 0.18), Vector3.ZERO, 0.04)
 	var leaf := Kit.leaf_mesh(0.06, 0.04, 0.3)
@@ -746,6 +749,7 @@ func _door() -> void:
 	sign.position = Vector3(0.42, 1.55, -0.03)
 	sign.rotation_degrees = Vector3(0, 180, 0)
 	door.add_child(sign)
+	door_sign = sign
 	# street outside the door (simple, lit)
 	Kit.box(root, Vector3(3.0, 0.05, 2.0), Kit.pbr("concrete_pbr", 0.9, 0.0, Color("6c6f74"), Vector3(1, 1, 1), true), Vector3(DOOR_X, -0.025, fz + 1.05))
 	var street := QuadMesh.new()
@@ -773,3 +777,11 @@ func ring_bell() -> void:
 	var t := bell.create_tween()
 	t.tween_property(bell, "scale", Vector3(1.1, 0.85, 1.1), 0.06)
 	t.tween_property(bell, "scale", Vector3.ONE, 0.12)
+
+
+## Re-applies translated texts after a language change.
+func relabel() -> void:
+	if door_sign:
+		door_sign.text = I18n.t("ABERTO")
+	if tablet_label:
+		tablet_label.text = I18n.t("PEDIDOS  [P]")
