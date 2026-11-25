@@ -1,4 +1,6 @@
 extends "res://scripts/device_base.gd"
+
+const I18n = preload("res://scripts/i18n.gd")
 ## 14" aluminium ultrabook at real scale (312 x 221 x 18 mm).
 ## Body frame: origin = centre of the closed laptop, +Z = front edge, +Y = keyboard side.
 
@@ -290,7 +292,7 @@ func _battery_model(old: bool) -> Node3D:
 	var label := Kit.slab(n, Vector3(0.12, 0.0002, 0.042), 0.002, 0.0001, label_mat, null, label_mat, Vector3(0, -0.0036 if not old else -0.0038, 0))
 	cells.append(label)
 	label3d(n, "Li-ion 11.55V  52.6Wh", 30, 0.00013, Color("1d2227"), Vector3(0, label.position.y - 0.00015, -0.008), Vector3(90, 180, 0))
-	label3d(n, "SUBSTITUIR" if old else "NOVA  •  4500 mAh", 28, 0.00012, Color("c0392b") if old else Color("1f8a4c"), Vector3(0, label.position.y - 0.00015, 0.009), Vector3(90, 180, 0))
+	label3d(n, I18n.t("SUBSTITUIR") if old else I18n.t("NOVA  •  4500 mAh"), 28, 0.00012, Color("c0392b") if old else Color("1f8a4c"), Vector3(0, label.position.y - 0.00015, 0.009), Vector3(90, 180, 0))
 	# connector + cable
 	Kit.box(n, Vector3(0.016, 0.0018, 0.008), Kit.plastic(Color("efefef"), 0.5), Vector3(0.02, -0.0012, -0.040))
 	n.set_meta("meshes", cells)
@@ -307,7 +309,7 @@ func _build_screen_viewport() -> SubViewport:
 		_dead_screen.size = Vector2(640, 400)
 		root.add_child(_dead_screen)
 		var bat := Label.new()
-		bat.text = "BATERIA 0%  -  Ligue o carregador"
+		bat.text = I18n.t("BATERIA 0%  -  Ligue o carregador")
 		bat.position = Vector2(120, 180)
 		bat.add_theme_font_size_override("font_size", 28)
 		bat.add_theme_color_override("font_color", Color("e74c3c"))

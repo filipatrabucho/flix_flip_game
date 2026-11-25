@@ -8,6 +8,9 @@ const Laptop = preload("res://scripts/laptop.gd")
 const Phone = preload("res://scripts/phone.gd")
 const Gamepad = preload("res://scripts/gamepad.gd")
 const Data = preload("res://scripts/jobs_data.gd")
+const I18n = preload("res://scripts/i18n.gd")
+const Story = preload("res://scripts/story_data.gd")
+const CustomerScene = preload("res://scripts/customer.gd")
 const Hand = preload("res://scripts/glove_hand.gd")
 const Tools = preload("res://scripts/tools3d.gd")
 const UIcon = preload("res://scripts/ui_icon.gd")
@@ -77,6 +80,22 @@ var ratings: Array = []                # customer star ratings
 var next_order_at := 0.0
 var order_seq := 0
 var FAULTS: Dictionary = Data.faults()
+var customers: Dictionary = {}         # order id -> customer node
+var counter_queue: Array = []
+var story_chapter := 0
+var story_deliveries := 0
+var story_flags: Dictionary = {}
+var rent_due_day := 0
+var rent_amount := 300
+var dialog_root: Control
+var dialog_avatar: Control
+var dialog_name: Label
+var dialog_text: Label
+var dialog_buttons: HBoxContainer
+var dialog_lines: Array = []
+var dialog_btns: Array = []
+var dialog_done := Callable()
+var dialog_prev_mode := "walk"
 var active_device := ""
 var focus_job := "laptop"
 var walk_yaw := 0.0
@@ -137,6 +156,10 @@ var board_box: VBoxContainer
 var board_kind := ""
 var orders_badge: Label
 var meter_label: Label
+
+
+func T(s: String) -> String:
+	return I18n.t(s)
 
 
 func _ready() -> void:
@@ -265,12 +288,20 @@ func _reset_jobs() -> void:
 	jobs.clear()
 
 
+func _clear_customers() -> void:
+	for c in customers.values():
+		if is_instance_valid(c):
+			c.queue_free()
+	customers.clear()
+	counter_queue.clear()
+
+
 func _fault(id: String) -> Dictionary:
 	return FAULTS[jobs[id]["fault"]]
 
 
 func _dev_name(id: String) -> String:
-	return str(Data.DEVICES[id]["name"])
+	return T(str(Data.DEVICES[id]["name"]))
 
 
 ## Puts a customer's device on its bench slot, set up for its fault.
@@ -381,6 +412,9 @@ func _process(delta: float) -> void:
 			_end_of_day()
 		elif mode != "wheel":
 			_order_tick()
+	for c in customers.values():
+		if is_instance_valid(c):
+			c.look_target = cam.global_position
 	match mode:
 		"walk":
 			_walk_move(delta)
@@ -443,6 +477,10 @@ func _handle_key(e: InputEventKey) -> void:
 		if k == KEY_ESCAPE:
 			_resume()
 		return
+	if mode == "dialog":
+		if k == KEY_E or k == KEY_ENTER or k == KEY_SPACE or k == KEY_KP_ENTER:
+			_dialog_advance()
+		return
 	if mode == "board":
 		if k == KEY_ESCAPE or (k == KEY_P and board_kind == "orders") or (k == KEY_L and board_kind == "shop"):
 			_close_board()
@@ -502,6 +540,16 @@ func _walk_move(delta: float) -> void:
 		# keep out of the furniture either side of the bench
 		if p.z < -0.75 and absf(p.x) > 1.1:
 			p.z = -0.75
+		# the shop counter (x -0.6..1.6, z 1.2..1.9): stay on the workshop side
+		if p.x > -0.65 and p.x < 1.65 and p.z > 1.0 and p.z < 1.95:
+			if cam.position.z <= 1.0:
+				p.z = 1.0
+			elif cam.position.x <= -0.65:
+				p.x = -0.65
+			elif cam.position.x >= 1.65:
+				p.x = 1.65
+			else:
+				p.z = 1.95
 		p.y = EYE_H + sin(Time.get_ticks_msec() * 0.009) * 0.006
 		cam.position = p
 
@@ -527,6 +575,11 @@ func _walk_hover() -> void:
 		elif t.begins_with("tool:"):
 			pick = t
 			where = hit.collider.global_position + Vector3(0, 0.07, 0)
+		elif t == "customer":
+			var cn: Node3D = hit.collider.get_meta("customer")
+			if is_instance_valid(cn) and not cn.walking:
+				pick = "cust:%d" % cn.order_id
+				where = cn.global_position + Vector3(0, 1.85 * cn.height, 0)
 	if pick != hovered_pick:
 		if hovered_pick.begins_with("device:"):
 			var old_id := hovered_pick.substr(7)
@@ -539,12 +592,19 @@ func _walk_hover() -> void:
 		prompt.hide()
 		return
 	var text := ""
-	if pick.begins_with("device:"):
+	if pick.begins_with("cust:"):
+		var cc: Node3D = customers.get(int(pick.substr(5)))
+		if cc == null:
+			prompt.hide()
+			return
+		var purpose := str(cc.get_meta("purpose", "order"))
+		text = (T("Entregar a %s") if purpose == "pickup" else T("Falar com %s")) % cc.display_name
+	elif pick.begins_with("device:"):
 		var id := pick.substr(7)
-		text = "Reparar %s de %s" % [_dev_name(id), jobs[id]["order"]["customer"]] if not jobs[id]["done"] else "%s reparado" % _dev_name(id)
+		text = T("Reparar %s de %s") % [_dev_name(id), jobs[id]["order"]["customer"]] if not jobs[id]["done"] else T("%s reparado") % _dev_name(id)
 	else:
 		var tid := pick.substr(5)
-		text = "Pegar %s" % Tools.NAMES[tid] if tool != tid else "Pousar %s" % Tools.NAMES[tid]
+		text = T("Pegar %s") % T(Tools.NAMES[tid]) if tool != tid else T("Pousar %s") % T(Tools.NAMES[tid])
 	_show_prompt("E", text, where)
 
 
@@ -562,6 +622,11 @@ func _show_prompt(key: String, text: String, world_pos: Vector3) -> void:
 
 
 func _interact_walk() -> void:
+	if hovered_pick.begins_with("cust:"):
+		var cc: Node3D = customers.get(int(hovered_pick.substr(5)))
+		if cc and is_instance_valid(cc):
+			_talk_to_customer(cc)
+		return
 	if hovered_pick.begins_with("device:"):
 		var id := hovered_pick.substr(7)
 		if not jobs.has(id) or jobs[id]["done"]:
@@ -703,9 +768,9 @@ func _ensure_part(id: String, step: Dictionary) -> void:
 	if int(inventory.get(part, 0)) > 0:
 		inventory[part] = int(inventory[part]) - 1
 		d.spawn_part(part, PART_POS[id])
-		_toast("Tiraste do stock: %s" % Data.PARTS[part]["name"], false, GREEN)
+		_toast(T("Tiraste do stock: %s") % T(Data.PARTS[part]["name"]), false, GREEN)
 	else:
-		_toast("Falta a peça: %s. Compra-a na Loja (L)." % Data.PARTS[part]["name"], true)
+		_toast(T("Falta a peça: %s. Compra-a na Loja (L).") % T(Data.PARTS[part]["name"]), true)
 
 
 func _restore_pose(_id: String) -> float:
@@ -775,7 +840,7 @@ func _inspect_click() -> void:
 		ok = str(allowed) == tool
 	if not ok:
 		var need := _tool_need_text(allowed)
-		_toast("Precisas de: %s" % need, true)
+		_toast(T("Precisas de: %s") % need, true)
 		_flash_needed_slot(allowed)
 		return
 	var target := hovered_target
@@ -796,11 +861,11 @@ func _tool_need_text(allowed) -> String:
 	if allowed is Array:
 		var parts: Array = []
 		for a in allowed:
-			parts.append("%s (%d)" % [Tools.NAMES[a], Tools.IDS.find(a) + 1])
-		return " ou ".join(parts)
+			parts.append(T("%s (%d)") % [T(Tools.NAMES[a]), Tools.IDS.find(a) + 1])
+		return T(" ou ").join(parts)
 	if str(allowed) == "none":
-		return "mão livre (Q)"
-	return "%s (tecla %d)" % [Tools.NAMES[str(allowed)], Tools.IDS.find(str(allowed)) + 1]
+		return T("mão livre (Q)")
+	return T("%s (tecla %d)") % [T(Tools.NAMES[str(allowed)]), Tools.IDS.find(str(allowed)) + 1]
 
 
 func _after_action(id: String) -> void:
@@ -839,31 +904,31 @@ func _perform(id: String, act: String, target: String) -> float:
 		"power_dead":
 			d.press_power(false)
 			d.show_dead_battery()
-			_toast("Não liga... o ecrã pisca \"Bateria 0%\". Vamos medir.")
+			_toast(T("Não liga... o ecrã pisca \"Bateria 0%\". Vamos medir."))
 			return 1.2
 		"power_hot":
 			d.press_power(false)
-			d.boot_then_fail("SOBREAQUECIMENTO\nTemperatura do CPU: 98 °C\nA desligar...", Color("ff6b5b"))
+			d.boot_then_fail(T("SOBREAQUECIMENTO\nTemperatura do CPU: 98 °C\nA desligar..."), Color("ff6b5b"))
 			jobs[id]["diagnosed"] = true
 			get_tree().create_timer(1.6).timeout.connect(func() -> void:
-				_toast("Arranca e desliga-se a ferver. Avaria: SOBREAQUECIMENTO", false, GREEN))
+				_toast(T("Arranca e desliga-se a ferver. Avaria: SOBREAQUECIMENTO"), false, GREEN))
 			return 2.0
 		"power_nodisk":
 			d.press_power(false)
-			d.boot_then_fail("Nenhum dispositivo de arranque encontrado.\nInsira um disco e reinicie.", Color("e8eef4"))
+			d.boot_then_fail(T("Nenhum dispositivo de arranque encontrado.\nInsira um disco e reinicie."), Color("e8eef4"))
 			jobs[id]["diagnosed"] = true
 			get_tree().create_timer(1.6).timeout.connect(func() -> void:
-				_toast("O sistema não encontra o disco. Avaria: SSD", false, GREEN))
+				_toast(T("O sistema não encontra o disco. Avaria: SSD"), false, GREEN))
 			return 2.0
 		"power_lowbat":
 			d.press_button_only()
-			d.show_message("Bateria 1%\nA desligar...", Color("ff6b5b"), 1.8)
-			_toast("Liga e desliga-se logo... e o ecrã está levantado de um lado.")
+			d.show_message(T("Bateria 1%\nA desligar..."), Color("ff6b5b"), 1.8)
+			_toast(T("Liga e desliga-se logo... e o ecrã está levantado de um lado."))
 			return 1.2
 		"power_nocharge":
 			d.press_button_only()
-			d.show_message("Bateria fraca\nLigue o carregador", Color("ffcf6b"), 1.8)
-			_toast("Sem bateria, e o cabo não carrega. Vamos medir a porta.")
+			d.show_message(T("Bateria fraca\nLigue o carregador"), Color("ffcf6b"), 1.8)
+			_toast(T("Sem bateria, e o cabo não carrega. Vamos medir a porta."))
 			return 1.2
 		"measure":
 			var digits: Label3D = bench_tools["multimeter"].get_node("Body/Digits")
@@ -873,12 +938,12 @@ func _perform(id: String, act: String, target: String) -> float:
 			for v in ["12.6", "4.18", "0.71", reading]:
 				tw.tween_callback(func() -> void:
 					digits.text = v
-					meter_label.text = v + " V")
+					meter_label.text = v + T(" V"))
 				tw.tween_interval(0.25)
 			tw.tween_interval(2.5)
 			tw.tween_callback(meter_panel.hide)
 			jobs[id]["diagnosed"] = true
-			var result := str(step.get("result", ""))
+			var result := T(str(step.get("result", "")))
 			get_tree().create_timer(1.0).timeout.connect(func() -> void: _toast(result, false, GREEN))
 			return 1.1
 		"unscrew":
@@ -898,7 +963,7 @@ func _perform(id: String, act: String, target: String) -> float:
 		"clean_fan":
 			_dust_puff(d.targets["fan"].global_position)
 			if d.clean_fan():
-				_toast("Ventoinha limpa!", false, GREEN)
+				_toast(T("Ventoinha limpa!"), false, GREEN)
 			return 0.65
 		"remove_part":
 			d.remove_part(str(step["part"]), OLD_PART_BIN)
@@ -912,16 +977,16 @@ func _perform(id: String, act: String, target: String) -> float:
 			else:
 				d.press_power("on")
 			get_tree().create_timer(0.8).timeout.connect(func() -> void:
-				_toast("Funciona perfeitamente! Reparação concluída.", false, GREEN))
+				_toast(T("Funciona perfeitamente! Reparação concluída."), false, GREEN))
 			return 1.6
 		"power_glitch":
 			d.press_power("glitch")
-			_toast("O ecrã pisca com riscos... parece danificado.")
+			_toast(T("O ecrã pisca com riscos... parece danificado."))
 			return 1.0
 		"wipe":
 			if d.wipe():
 				jobs[id]["diagnosed"] = true
-				_toast("Vidro e painel rachados. Avaria: ECRÃ PARTIDO", false, GREEN)
+				_toast(T("Vidro e painel rachados. Avaria: ECRÃ PARTIDO"), false, GREEN)
 			return 0.55
 		"open_screen":
 			d.open_screen()
@@ -940,25 +1005,25 @@ func _perform(id: String, act: String, target: String) -> float:
 			return 0.6
 		"pad_on":
 			d.set_led(true)
-			_toast("Liga. Vamos ver o que se passa.")
+			_toast(T("Liga. Vamos ver o que se passa."))
 			return 0.6
 		"pad_drift":
 			d.wiggle_stick(true)
 			jobs[id]["diagnosed"] = true
 			get_tree().create_timer(0.6).timeout.connect(func() -> void:
-				_toast("O analógico não volta ao centro. Avaria: DRIFT", false, GREEN))
+				_toast(T("O analógico não volta ao centro. Avaria: DRIFT"), false, GREEN))
 			return 0.9
 		"pad_test":
 			d.wiggle_stick(false)
 			d.set_led(true)
 			get_tree().create_timer(0.6).timeout.connect(func() -> void:
-				_toast("Analógico perfeito, sem drift! Reparação concluída.", false, GREEN))
+				_toast(T("Analógico perfeito, sem drift! Reparação concluída."), false, GREEN))
 			return 1.0
 		"pad_stuck":
 			d.press_a(true)
 			jobs[id]["diagnosed"] = true
 			get_tree().create_timer(0.8).timeout.connect(func() -> void:
-				_toast("O botão fica preso — sujidade pegajosa. Avaria: BOTÕES", false, GREEN))
+				_toast(T("O botão fica preso — sujidade pegajosa. Avaria: BOTÕES"), false, GREEN))
 			return 1.3
 		"clean_buttons":
 			_dust_puff(d.targets["buttons"].global_position)
@@ -968,7 +1033,7 @@ func _perform(id: String, act: String, target: String) -> float:
 			d.press_a(false)
 			d.set_led(true)
 			get_tree().create_timer(0.4).timeout.connect(func() -> void:
-				_toast("Os botões estão como novos! Reparação concluída.", false, GREEN))
+				_toast(T("Os botões estão como novos! Reparação concluída."), false, GREEN))
 			return 0.8
 	return 0.4
 
@@ -1036,7 +1101,7 @@ func _equip(id: String) -> void:
 		hand.set_pose("grip")
 	_refresh_hotbar()
 	if (mode == "walk" or mode == "inspect") and id != "none":
-		_toast("%s na mão." % Tools.NAMES[id])
+		_toast(T("%s na mão.") % T(Tools.NAMES[id]))
 
 
 func _cycle_tool(dir: int) -> void:
@@ -1136,13 +1201,13 @@ func _gain_xp(amount: int) -> void:
 	while xp >= 100:
 		xp -= 100
 		level += 1
-		_toast("Subiste para o nível %d!" % level, false, YELLOW)
+		_toast(T("Subiste para o nível %d!") % level, false, YELLOW)
 
 
 func _spend(amount: float, what: String) -> void:
 	money -= amount
 	day_profit -= amount
-	_toast("-%s  %s" % [_eur(amount), what])
+	_toast(T("-%s  %s") % [_eur(amount), what])
 
 
 func _abs_minutes() -> float:
@@ -1153,7 +1218,7 @@ func _clock_text(abs_min: float) -> String:
 	var d := int(abs_min / 1440.0) + 1
 	var m := int(fmod(abs_min, 1440.0))
 	var t := "%02d:%02d" % [m / 60, m % 60]
-	return t if d == day else "Dia %d, %s" % [d, t]
+	return t if d == day else T("Dia %d, %s") % [d, t]
 
 
 func _reputation() -> float:
@@ -1165,26 +1230,47 @@ func _reputation() -> float:
 	return total / ratings.size()
 
 
-## Creates a random customer order (device + fault + complaint + payment + deadline).
-func _new_order(silent := false) -> void:
-	var keys: Array = FAULTS.keys()
-	# avoid flooding the same device
-	var fk: String = keys[randi() % keys.size()]
-	var f: Dictionary = FAULTS[fk]
-	var cust: Array = Data.CUSTOMERS[randi() % Data.CUSTOMERS.size()]
-	var complaints: Array = f["complaints"]
+## Creates a customer order (random, or a story order) and sends the customer in.
+func _new_order(silent := false, story_key := "") -> Dictionary:
+	var fk := ""
+	var cust_name := ""
+	var cust_color := Color.WHITE
+	var complaint := ""
+	var pay := 0.0
+	if story_key != "":
+		var so: Dictionary = Story.STORY_ORDERS[story_key]
+		var ch: Dictionary = Story.CHARACTERS[story_key]
+		fk = so["fault"]
+		cust_name = ch["name"]
+		cust_color = ch["color"]
+		complaint = I18n.pick(so["complaint"])
+		pay = float(so["pay"])
+	else:
+		var keys: Array = []
+		for k in FAULTS.keys():
+			if FAULTS[k]["device"] == "gamepad" and not bool(story_flags.get("leo", false)):
+				continue
+			keys.append(k)
+		fk = keys[randi() % keys.size()]
+		var cust: Array = Data.CUSTOMERS[randi() % Data.CUSTOMERS.size()]
+		cust_name = cust[0]
+		cust_color = cust[1]
+		var complaints: Array = FAULTS[fk]["complaints"]
+		complaint = T(complaints[randi() % complaints.size()])
+		var rep_bonus := 0.9 + 0.04 * _reputation()
+		pay = snappedf(float(FAULTS[fk]["pay"]) * randf_range(0.9, 1.2) * rep_bonus * (1.15 if bool(story_flags.get("press", false)) else 1.0), 5.0)
 	order_seq += 1
-	var rep_bonus := 0.9 + 0.04 * _reputation()
-	var pay := snappedf(float(f["pay"]) * randf_range(0.9, 1.2) * rep_bonus, 5.0)
 	var o := {
-		"id": order_seq, "customer": cust[0], "color": cust[1], "device": f["device"], "fault": fk,
-		"complaint": complaints[randi() % complaints.size()], "pay": pay,
-		"deadline": _abs_minutes() + randf_range(150, 330), "expires": _abs_minutes() + 150, "status": "new",
+		"id": order_seq, "customer": cust_name, "color": cust_color, "device": FAULTS[fk]["device"], "fault": fk,
+		"complaint": complaint, "pay": pay, "story": story_key,
+		"deadline": _abs_minutes() + randf_range(180, 330), "expires": _abs_minutes() + (9999.0 if story_key != "" else 170.0), "status": "new",
 	}
 	orders.append(o)
+	_spawn_customer(o, "order")
 	if not silent:
-		_toast("Novo cliente: %s trouxe um %s. Abre os Pedidos (P)." % [o["customer"], _dev_name(o["device"]).to_lower()], false, YELLOW)
+		_toast(T("Novo cliente no balcão: %s trouxe um %s.") % [o["customer"], _dev_name(o["device"]).to_lower()], false, YELLOW)
 	_refresh_orders_badge()
+	return o
 
 
 func _order_tick() -> void:
@@ -1196,25 +1282,39 @@ func _order_tick() -> void:
 				pending += 1
 		if pending < 3 and minutes < 18 * 60:
 			_new_order()
-		next_order_at = now + randf_range(50, 110) / clampf(_reputation() / 4.0, 0.7, 1.25)
+		var rate := clampf(_reputation() / 4.0, 0.7, 1.25) * (1.5 if bool(story_flags.get("press", false)) else 1.0)
+		next_order_at = now + randf_range(55, 115) / rate
 	# unanswered requests walk out
 	for o in orders.duplicate():
 		if o["status"] == "new" and now > float(o["expires"]):
 			orders.erase(o)
-			_toast("%s cansou-se de esperar e foi embora." % o["customer"], true)
+			_customer_leave(int(o["id"]), "sad")
+			_toast(T("%s cansou-se de esperar e foi embora.") % o["customer"], true)
 			_refresh_orders_badge()
+	_story_tick()
 
 
 func _accept_order(o: Dictionary) -> void:
+	if o["status"] != "new":
+		return
 	o["status"] = "accepted"
-	_toast("Pedido de %s aceite." % o["customer"], false, GREEN)
+	_toast(T("Pedido de %s aceite.") % o["customer"], false, GREEN)
+	var c: Node3D = customers.get(int(o["id"]))
+	if c:
+		c.hold(null)
+		c.set_mood("happy")
+	_customer_leave(int(o["id"]), "happy")
 	_place_waiting_orders()
 	_refresh_orders_panel()
 	_refresh_objective()
 
 
 func _decline_order(o: Dictionary) -> void:
+	if str(o.get("story", "")) != "":
+		_toast(T("Esta pessoa precisa mesmo de ti... aceita o pedido!"), true)
+		return
 	orders.erase(o)
+	_customer_leave(int(o["id"]), "sad")
 	_refresh_orders_panel()
 	_refresh_orders_badge()
 
@@ -1236,20 +1336,22 @@ func _place_waiting_orders() -> void:
 func _job_complete(id: String) -> void:
 	jobs[id]["done"] = true
 	var o: Dictionary = jobs[id]["order"]
-	var f := _fault(id)
+	o["status"] = "ready"
+	_toast(T("Pronto! Liguei a %s — vem buscar ao balcão.") % o["customer"], false, GREEN)
+	_exit_inspect_forced()
+	get_tree().create_timer(1.2).timeout.connect(func() -> void: _spawn_customer(o, "pickup"))
+	_refresh_objective()
+
+
+## Payment summary for a finished job (shown when the customer picks it up).
+func _job_payment(id: String) -> Dictionary:
+	var o: Dictionary = jobs[id]["order"]
 	var on_time := _abs_minutes() <= float(o["deadline"])
 	var tip := snappedf(float(o["pay"]) * (randf_range(0.1, 0.25) if on_time else 0.0), 1.0)
 	var stars := 5 if on_time else 3
 	if on_time and _abs_minutes() > float(o["deadline"]) - 30.0:
 		stars = 4
-	var star_txt := "★".repeat(stars) + "☆".repeat(5 - stars)
-	_open_popup("Reparação concluída!", [
-		["%s — %s" % [_dev_name(id), f["fault"]], TEXT],
-		["Cliente: %s" % o["customer"], MUTED],
-		["Pagamento:  %s" % _eur(float(o["pay"])), GREEN],
-		["Gorjeta:  %s" % _eur(tip) if tip > 0 else "Sem gorjeta (entregue fora de prazo)", GREEN if tip > 0 else Color("ffb4a8")],
-		["Avaliação:  %s     +%d XP" % [star_txt, int(f["xp"])], YELLOW],
-	], [["Entregar a %s" % o["customer"], func() -> void: _deliver(id, tip, stars)]], false)
+	return {"tip": tip, "stars": stars}
 
 
 func _deliver(id: String, tip: float, stars: int) -> void:
@@ -1259,12 +1361,13 @@ func _deliver(id: String, tip: float, stars: int) -> void:
 	money += gain
 	day_profit += gain
 	repaired += 1
+	story_deliveries += 1
 	ratings.append(stars)
 	if ratings.size() > 30:
 		ratings.pop_front()
 	_gain_xp(int(f["xp"]))
-	_close_popup()
-	_exit_inspect_forced()
+	if mode == "inspect":
+		_exit_inspect_forced()
 	orders.erase(o)
 	jobs.erase(id)
 	var d: Node3D = devices[id]
@@ -1278,8 +1381,15 @@ func _deliver(id: String, tip: float, stars: int) -> void:
 		d.queue_free()
 		_place_waiting_orders()
 		_refresh_objective())
-	_toast("+%s  %s ficou muito contente!" % [_eur(gain), o["customer"]], false, GREEN)
+	var c: Node3D = customers.get(int(o["id"]))
+	if c:
+		c.hold(_device_standin(id))
+		c.set_mood("happy")
+	_customer_leave(int(o["id"]), "happy")
+	if gain > 0.0:
+		_toast(T("+%s  %s ficou muito contente!") % [_eur(gain), o["customer"]], false, GREEN)
 	_save_game()
+	_story_check()
 
 
 func _exit_inspect_forced() -> void:
@@ -1288,19 +1398,27 @@ func _exit_inspect_forced() -> void:
 		d.busy = false
 	if mode == "popup":
 		mode = "inspect"
-	_exit_inspect()
+	if mode == "inspect":
+		_exit_inspect()
 
 
 func _end_of_day() -> void:
 	minutes = 20 * 60
 	var finished_day := day
 	var p := day_profit
-	_open_popup("Fim do Dia %d" % finished_day, [
-		["A oficina fecha às 20:00.", TEXT],
-		["Resultado do dia:  %s" % _eur(p), GREEN if p >= 0 else Color("e74c3c")],
-		["Equipamentos reparados (total):  %d" % repaired, MUTED],
-		["Reputação:  %.1f ★" % _reputation(), YELLOW],
-	], [["Começar o Dia %d" % (finished_day + 1), func() -> void:
+	var lines := [
+		[T("A oficina fecha às 20:00."), TEXT],
+		[T("Resultado do dia:  %s") % _eur(p), GREEN if p >= 0 else Color("e74c3c")],
+		[T("Equipamentos reparados (total):  %d") % repaired, MUTED],
+		[T("Reputação:  %.1f ★") % _reputation(), YELLOW],
+	]
+	var rent_today := rent_due_day > 0 and finished_day >= rent_due_day
+	if rent_today:
+		lines.append([T("Renda a pagar hoje:  %s") % _eur(float(rent_amount)), Color("ffcf6b")])
+	_open_popup(T("Fim do Dia %d") % finished_day, lines, [[T("Começar o Dia %d") % (finished_day + 1), func() -> void:
+		_close_popup()
+		if rent_today:
+			_pay_rent()
 		day = finished_day + 1
 		minutes = 8 * 60
 		day_profit = 0.0
@@ -1308,11 +1426,421 @@ func _end_of_day() -> void:
 		for o in orders.duplicate():
 			if o["status"] == "new":
 				orders.erase(o)
-		_new_order(true)
-		_new_order(true)
-		_close_popup()
+				_customer_leave(int(o["id"]), "neutral", true)
+		_morning_orders()
 		_refresh_orders_badge()
 		_save_game()]], false)
+
+
+func _morning_orders() -> void:
+	var queued := story_flags.get("queue", []) as Array
+	if not queued.is_empty():
+		var key: String = queued.pop_front()
+		story_flags["queue"] = queued
+		_new_order(true, key)
+	else:
+		_new_order(true)
+	_new_order(true)
+
+
+# =============================================================================
+# 3D customers at the counter
+# =============================================================================
+const DOOR_OUT := Vector3(2.0, 0.0, 3.4)
+const DOOR_IN := Vector3(2.0, 0.0, 2.15)
+const QUEUE_SPOTS := [Vector3(0.45, 0.0, 2.08), Vector3(1.05, 0.0, 2.2), Vector3(1.5, 0.0, 2.32), Vector3(0.95, 0.0, 2.45)]
+
+
+func _spawn_customer(o: Dictionary, purpose: String, story_char := "") -> Node3D:
+	var oid := int(o.get("id", -1))
+	if customers.has(oid) and is_instance_valid(customers[oid]):
+		return customers[oid]
+	var c: Node3D = CustomerScene.new()
+	var who := story_char if story_char != "" else str(o.get("story", ""))
+	var look: Dictionary = {}
+	if who != "" and Story.CHARACTERS.has(who):
+		look = Story.CHARACTERS[who].get("look", {})
+	c.setup(str(o["customer"]), hash(str(o["customer"])) + oid * 7, look)
+	c.order_id = oid
+	c.set_meta("purpose", purpose)
+	c.set_meta("order", o)
+	add_child(c)
+	c.global_position = DOOR_OUT
+	c.rotation.y = PI
+	if purpose == "order" and o.has("device"):
+		c.hold(_device_standin(str(o["device"])))
+		c.set_mood("worried")
+	customers[oid] = c
+	counter_queue.append(oid)
+	room.open_door()
+	c.walk_path([DOOR_IN, _queue_spot(counter_queue.size() - 1)], func() -> void:
+		c.rotation.y = PI
+		c.look_enabled = true
+		c.set_bubble("ok" if purpose == "pickup" else "!"))
+	return c
+
+
+func _queue_spot(i: int) -> Vector3:
+	return QUEUE_SPOTS[mini(i, QUEUE_SPOTS.size() - 1)]
+
+
+func _customer_leave(oid: int, mood := "neutral", instant := false) -> void:
+	var c: Node3D = customers.get(oid)
+	counter_queue.erase(oid)
+	customers.erase(oid)
+	if c == null or not is_instance_valid(c):
+		return
+	if instant:
+		c.queue_free()
+		return
+	c.set_bubble("")
+	c.look_enabled = false
+	c.set_mood(mood)
+	c.pick.collision_layer = 0
+	get_tree().create_timer(0.6).timeout.connect(func() -> void:
+		c.walk_path([DOOR_IN, DOOR_OUT], func() -> void: c.queue_free())
+		get_tree().create_timer(1.0).timeout.connect(room.open_door))
+	_update_queue()
+
+
+func _update_queue() -> void:
+	for i in range(counter_queue.size()):
+		var c: Node3D = customers.get(counter_queue[i])
+		if c and is_instance_valid(c) and not c.walking:
+			var spot := _queue_spot(i)
+			if c.global_position.distance_to(spot) > 0.1:
+				c.look_enabled = false
+				c.walk_path([spot], func() -> void:
+					c.rotation.y = PI
+					c.look_enabled = true)
+
+
+## Small stand-in of a device for customers to carry.
+func _device_standin(device: String) -> Node3D:
+	var n := Node3D.new()
+	match device:
+		"laptop":
+			Kit.slab(n, Vector3(0.31, 0.018, 0.22), 0.011, 0.003, Kit.aluminium(Color("7a8189"), 0.34))
+			n.rotation_degrees = Vector3(-10, 0, 0)
+		"phone":
+			Kit.slab(n, Vector3(0.072, 0.008, 0.148), 0.01, 0.002, Kit.black_glass(), Kit.aluminium(Color("4a5a6e"), 0.22))
+			n.rotation_degrees = Vector3(-60, 0, 0)
+			n.position = Vector3(0.08, 0.05, 0)
+		"gamepad":
+			Kit.slab(n, Vector3(0.12, 0.024, 0.068), 0.026, 0.008, Kit.plastic(Color("2a2e35"), 0.42))
+			for sx in [-1.0, 1.0]:
+				Kit.capsule(n, 0.021, 0.085, Kit.plastic(Color("2a2e35"), 0.42), Vector3(sx * 0.048, -0.004, 0.034), Vector3(62, 0, sx * -14.0))
+			n.rotation_degrees = Vector3(-40, 0, 0)
+	return n
+
+
+func _talk_to_customer(c: Node3D) -> void:
+	var purpose := str(c.get_meta("purpose", "order"))
+	var o: Dictionary = c.get_meta("order", {})
+	room.ring_bell()
+	if purpose == "story":
+		var scene := str(c.get_meta("scene", ""))
+		c.set_bubble("talk")
+		_play_scene(scene, func() -> void:
+			var after: Callable = c.get_meta("after", Callable())
+			_customer_leave(c.order_id, "happy")
+			if after.is_valid():
+				after.call())
+		return
+	if purpose == "pickup":
+		var id := str(o["device"])
+		if not jobs.has(id):
+			return
+		var pay := _job_payment(id)
+		var stars: int = pay["stars"]
+		var tip: float = pay["tip"]
+		var star_txt := "★".repeat(stars) + "☆".repeat(5 - stars)
+		var lines: Array = []
+		var story_key := str(o.get("story", ""))
+		var after_scene := ""
+		if story_key != "":
+			after_scene = Story.STORY_ORDERS[story_key]["deliver"]
+		var text := T("Já está pronto? Que maravilha!") + "\n\n" + T("Pagamento:  %s") % _eur(float(o["pay"]))
+		if tip > 0:
+			text += "     " + T("Gorjeta:  %s") % _eur(tip)
+		text += "\n" + T("Avaliação:  %s") % star_txt
+		lines = [[str(o["customer"]), o["color"], text]]
+		_open_dialog(lines, [[T("Entregar a %s") % o["customer"], func() -> void:
+			_close_dialog()
+			_deliver(id, tip, stars)
+			if after_scene != "":
+				get_tree().create_timer(0.3).timeout.connect(func() -> void: _play_scene(after_scene, func() -> void: _story_after_delivery(story_key)))
+		]])
+		return
+	# new order: complaint + accept / decline
+	var text2 := "“%s”" % o["complaint"] + "\n\n" + T("Pagamento: %s   •   Prazo: %s") % [_eur(float(o["pay"])), _clock_text(float(o["deadline"]))]
+	var accept_scene := ""
+	if str(o.get("story", "")) != "":
+		accept_scene = Story.STORY_ORDERS[str(o["story"])]["accept"]
+	var show_order := func() -> void:
+		_open_dialog([[str(o["customer"]) + "  •  " + _dev_name(str(o["device"])), o["color"], text2]], [
+			[T("Aceitar"), func() -> void:
+				_close_dialog()
+				_accept_order(o)],
+			[T("Recusar"), func() -> void:
+				_close_dialog()
+				_decline_order(o)],
+		])
+	if accept_scene != "" and not bool(o.get("intro_done", false)):
+		o["intro_done"] = true
+		_play_scene(accept_scene, show_order)
+	else:
+		show_order.call()
+
+
+# =============================================================================
+# Dialogue box
+# =============================================================================
+func _build_dialog(base: Control) -> void:
+	dialog_root = Control.new()
+	dialog_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dialog_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	base.add_child(dialog_root)
+	var shade := ColorRect.new()
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color(0, 0, 0, 0.25)
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dialog_root.add_child(shade)
+	var p := _panel(Color(0.035, 0.06, 0.1, 0.96), 16, Vector4(22, 18, 24, 18))
+	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	p.anchor_left = 0.5
+	p.anchor_right = 0.5
+	p.anchor_top = 1.0
+	p.anchor_bottom = 1.0
+	p.offset_left = -440
+	p.offset_right = 440
+	p.offset_top = -250
+	p.offset_bottom = -30
+	dialog_root.add_child(p)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 18)
+	p.add_child(h)
+	dialog_avatar = Control.new()
+	dialog_avatar.custom_minimum_size = Vector2(84, 84)
+	dialog_avatar.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	dialog_avatar.draw.connect(func() -> void:
+		var col: Color = dialog_avatar.get_meta("color", Color.GRAY)
+		dialog_avatar.draw_circle(Vector2(42, 42), 41, col)
+		dialog_avatar.draw_arc(Vector2(42, 42), 41, 0, TAU, 48, Color(1, 1, 1, 0.5), 2.0, true)
+		var nm := str(dialog_avatar.get_meta("initial", ""))
+		dialog_avatar.draw_string(font_xbold, Vector2(0, 56), nm, HORIZONTAL_ALIGNMENT_CENTER, 84, 40, Color("10161d")))
+	h.add_child(dialog_avatar)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 8)
+	h.add_child(v)
+	dialog_name = _label("", 22, YELLOW, font_xbold)
+	v.add_child(dialog_name)
+	dialog_text = _label("", 19, TEXT)
+	dialog_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dialog_text.custom_minimum_size = Vector2(700, 0)
+	dialog_text.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(dialog_text)
+	dialog_buttons = HBoxContainer.new()
+	dialog_buttons.add_theme_constant_override("separation", 10)
+	dialog_buttons.alignment = BoxContainer.ALIGNMENT_END
+	v.add_child(dialog_buttons)
+	dialog_root.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			_dialog_advance())
+	dialog_root.hide()
+
+
+## lines: [[name, color, text], ...]; buttons (optional, shown on the last line): [[label, Callable], ...]
+func _open_dialog(lines: Array, buttons: Array = [], on_done := Callable()) -> void:
+	if mode != "dialog":
+		dialog_prev_mode = mode if mode != "board" else "walk"
+	mode = "dialog"
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	prompt.hide()
+	dialog_lines = lines.duplicate()
+	dialog_btns = buttons
+	dialog_done = on_done
+	dialog_root.show()
+	_dialog_show_line()
+
+
+func _dialog_show_line() -> void:
+	var ln: Array = dialog_lines[0]
+	dialog_name.text = str(ln[0])
+	dialog_avatar.set_meta("color", ln[1])
+	dialog_avatar.set_meta("initial", str(ln[0]).replace("Sr. ", "").replace("Dona ", "").replace("Avô ", "").replace("Grandpa ", "").left(1))
+	dialog_avatar.queue_redraw()
+	dialog_text.text = str(ln[2])
+	dialog_text.visible_ratio = 0.0
+	var tw := create_tween()
+	tw.tween_property(dialog_text, "visible_ratio", 1.0, clampf(str(ln[2]).length() * 0.012, 0.25, 1.6))
+	for c in dialog_buttons.get_children():
+		dialog_buttons.remove_child(c)
+		c.queue_free()
+	if dialog_lines.size() == 1 and not dialog_btns.is_empty():
+		for b in dialog_btns:
+			var btn := _small_button(str(b[0]), dialog_buttons.get_child_count() == 0)
+			btn.custom_minimum_size = Vector2(150, 40)
+			btn.pressed.connect(b[1])
+			dialog_buttons.add_child(btn)
+	else:
+		dialog_buttons.add_child(_label(T("E / clique para continuar"), 14, MUTED))
+
+
+func _dialog_advance() -> void:
+	if dialog_text.visible_ratio < 1.0:
+		dialog_text.visible_ratio = 1.0
+		return
+	if dialog_lines.size() == 1 and not dialog_btns.is_empty():
+		return
+	dialog_lines.pop_front()
+	if dialog_lines.is_empty():
+		var cb := dialog_done
+		_close_dialog()
+		if cb.is_valid():
+			cb.call()
+	else:
+		_dialog_show_line()
+
+
+func _close_dialog() -> void:
+	dialog_root.hide()
+	if mode == "dialog":
+		mode = dialog_prev_mode if dialog_prev_mode in ["walk", "inspect"] else "walk"
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if mode == "walk" else Input.MOUSE_MODE_HIDDEN
+	_refresh_objective()
+
+
+func _play_scene(key: String, on_done := Callable()) -> void:
+	if not Story.SCENES.has(key):
+		if on_done.is_valid():
+			on_done.call()
+		return
+	var lines: Array = []
+	for ln in Story.SCENES[key]:
+		var ch: Dictionary = Story.CHARACTERS[ln[0]]
+		lines.append([T(str(ch["name"])), ch["color"], I18n.pick(ln[1])])
+	_open_dialog(lines, [], on_done)
+
+
+# =============================================================================
+# Story progression
+# =============================================================================
+func _chapter() -> Dictionary:
+	return Story.CHAPTERS[clampi(story_chapter, 0, Story.CHAPTERS.size() - 1)]
+
+
+func _chapter_id() -> String:
+	return str(_chapter()["id"])
+
+
+func _set_chapter(i: int) -> void:
+	story_chapter = i
+	story_deliveries = 0
+	var ch := _chapter()
+	_toast(I18n.pick(ch["title"]), false, YELLOW)
+	if _chapter_id() == "c2":
+		rent_due_day = maxi(Story.RENT_DAY, day)
+	_refresh_objective()
+	_save_game()
+
+
+## A story character walks in to talk (no device).
+func _story_visit(who: String, scene: String, after := Callable()) -> void:
+	order_seq += 1
+	var ch: Dictionary = Story.CHARACTERS[who]
+	var o := {"id": order_seq, "customer": T(str(ch["name"])), "color": ch["color"]}
+	var c := _spawn_customer(o, "story", who)
+	c.set_meta("scene", scene)
+	c.set_meta("after", after)
+	_toast(T("%s está no balcão e quer falar contigo.") % T(str(ch["name"])), false, YELLOW)
+
+
+func _story_begin() -> void:
+	_play_scene("intro", func() -> void:
+		_story_visit("armando", "armando_arrives", func() -> void:
+			_set_chapter(0)
+			_new_order(false, "rosa")))
+
+
+func _story_tick() -> void:
+	pass
+
+
+## Called after every delivery.
+func _story_check() -> void:
+	match _chapter_id():
+		"c1":
+			if story_deliveries >= 2:
+				get_tree().create_timer(1.5).timeout.connect(func() -> void:
+					_play_scene("c1_done", func() -> void: _set_chapter(1)))
+		"c3":
+			if story_deliveries >= 6 and _reputation() >= 4.5 and not bool(story_flags.get("press", false)):
+				story_flags["press"] = true
+				get_tree().create_timer(1.5).timeout.connect(func() -> void:
+					_story_visit("marta", "marta_arrives", func() -> void:
+						_set_chapter(3)
+						var q: Array = story_flags.get("queue", [])
+						q.append("armando")
+						story_flags["queue"] = q))
+
+
+func _story_after_delivery(key: String) -> void:
+	match key:
+		"leo":
+			story_flags["leo"] = true
+		"armando":
+			rent_amount = int(Story.RENT / 2)
+			_set_chapter(4)
+			_open_popup(T("Fim da história"), [
+				[T("Obrigado por jogares a história da oficina do Avô Júlio!"), TEXT],
+				[T("A oficina continua aberta: novos clientes chegam todos os dias."), MUTED],
+				[T("Renda reduzida para %s a cada 3 dias.") % _eur(float(rent_amount)), YELLOW],
+			], [[T("Continuar a jogar"), _close_popup]], true)
+
+
+func _pay_rent() -> void:
+	var first := not bool(story_flags.get("rent_paid_once", false))
+	var amount := float(rent_amount)
+	if money >= amount:
+		money -= amount
+		day_profit -= amount
+		if first:
+			story_flags["rent_paid_once"] = true
+			_play_scene("rent_paid", func() -> void: _after_first_rent())
+		else:
+			_toast(T("Renda paga: -%s") % _eur(amount), false, MUTED)
+	else:
+		var paid := maxf(0.0, money)
+		money -= paid
+		if first:
+			story_flags["rent_paid_once"] = true
+			_play_scene("rent_short", func() -> void: _after_first_rent())
+		else:
+			_toast(T("Não chegou para a renda toda (pagaste %s).") % _eur(paid), true)
+	rent_due_day = day + 3
+
+
+func _after_first_rent() -> void:
+	if _chapter_id() == "c2":
+		_set_chapter(2)
+		var q: Array = story_flags.get("queue", [])
+		q.append("leo")
+		story_flags["queue"] = q
+
+
+func _chapter_goal_text() -> String:
+	var ch := _chapter()
+	var g := I18n.pick(ch["goal"])
+	match str(ch["id"]):
+		"c1":
+			g += "  (%d/2)" % mini(story_deliveries, 2)
+		"c2":
+			g += "  (%s / %s)" % [_eur(money), _eur(float(Story.RENT))]
+		"c3":
+			g += "  (%d/6, ★%.1f)" % [mini(story_deliveries, 6), _reputation()]
+	return g
 
 
 # =============================================================================
@@ -1322,7 +1850,8 @@ func _save_game() -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		return
-	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inventory}))
+	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inventory,
+		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount}))
 
 
 func _has_save() -> bool:
@@ -1345,6 +1874,11 @@ func _load_game() -> bool:
 	level = int(data.get("level", 1))
 	repaired = int(data.get("repaired", 0))
 	ratings = data.get("ratings", [])
+	story_chapter = int(data.get("story_chapter", 0))
+	story_deliveries = int(data.get("story_deliveries", 0))
+	story_flags = data.get("story_flags", {})
+	rent_due_day = int(data.get("rent_due_day", 0))
+	rent_amount = int(data.get("rent_amount", Story.RENT))
 	inventory = {}
 	var inv = data.get("inventory", {})
 	if inv is Dictionary:
@@ -1359,6 +1893,8 @@ func _load_settings() -> void:
 		settings["quality"] = int(cfg.get_value("video", "quality", 1))
 		settings["sensitivity"] = float(cfg.get_value("input", "sensitivity", 1.0))
 		settings["fullscreen"] = bool(cfg.get_value("video", "fullscreen", false))
+		settings["lang"] = str(cfg.get_value("ui", "lang", "pt"))
+	I18n.lang = str(settings.get("lang", "pt"))
 
 
 func _save_settings() -> void:
@@ -1366,6 +1902,7 @@ func _save_settings() -> void:
 	cfg.set_value("video", "quality", settings["quality"])
 	cfg.set_value("video", "fullscreen", settings["fullscreen"])
 	cfg.set_value("input", "sensitivity", settings["sensitivity"])
+	cfg.set_value("ui", "lang", settings.get("lang", "pt"))
 	cfg.save(SETTINGS_PATH)
 
 
@@ -1398,7 +1935,7 @@ func _build_theme() -> void:
 	theme_main = Theme.new()
 	theme_main.default_font = font_bold
 	theme_main.default_font_size = 18
-	theme_main.set_color("font_color", "Label", TEXT)
+	theme_main.set_color("font_color", T("Label"), TEXT)
 
 
 func _panel_style(bg := PANEL_BG, radius := 12, border := PANEL_BORDER, pad := Vector4(16, 10, 16, 10)) -> StyleBoxFlat:
@@ -1475,6 +2012,7 @@ func _build_ui() -> void:
 	_build_wheel(base)
 	_build_menu(base)
 	_build_board(base)
+	_build_dialog(base)
 	_build_pause(base)
 	_build_popup(base)
 	fade = ColorRect.new()
@@ -1525,7 +2063,7 @@ func _build_hud(base: Control) -> void:
 	var xpv := VBoxContainer.new()
 	xpv.add_theme_constant_override("separation", 2)
 	xp_pill.add_child(xpv)
-	xp_label = _label("0 / 100 XP", 14, TEXT)
+	xp_label = _label(T("0 / 100 XP"), 14, TEXT)
 	xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	xpv.add_child(xp_label)
 	xp_bar = ProgressBar.new()
@@ -1557,7 +2095,7 @@ func _build_hud(base: Control) -> void:
 	var oh := HBoxContainer.new()
 	oh.add_theme_constant_override("separation", 8)
 	oh.add_child(_icon("chevron", 18))
-	objective_title = _label("Objetivo Atual", 19, YELLOW, font_xbold)
+	objective_title = _label(T("Objetivo Atual"), 19, YELLOW, font_xbold)
 	oh.add_child(objective_title)
 	ov.add_child(oh)
 	objective_rows = VBoxContainer.new()
@@ -1575,7 +2113,7 @@ func _build_hud(base: Control) -> void:
 	var rh := HBoxContainer.new()
 	rh.add_theme_constant_override("separation", 8)
 	rh.add_child(_icon("chevron", 18))
-	repair_title = _label("Reparação: Portátil", 19, YELLOW, font_xbold)
+	repair_title = _label(T("Reparação: Portátil"), 19, YELLOW, font_xbold)
 	rh.add_child(repair_title)
 	rv.add_child(rh)
 	var sep := HSeparator.new()
@@ -1598,7 +2136,7 @@ func _build_hud(base: Control) -> void:
 	var kc := _keycap("E")
 	ph.add_child(kc)
 	prompt.set_meta("key", kc.get_meta("label"))
-	prompt_label = _label("Interagir", 17, TEXT)
+	prompt_label = _label(T("Interagir"), 17, TEXT)
 	ph.add_child(prompt_label)
 	hud.add_child(prompt)
 	prompt.hide()
@@ -1671,7 +2209,7 @@ func _build_hud(base: Control) -> void:
 	sc.add_theme_constant_override("separation", 10)
 	sc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(sc)
-	for it in [["P", "Pedidos"], ["L", "Loja"]]:
+	for it in [["P", T("Pedidos")], ["L", T("Loja")]]:
 		var pp := _panel(Color(0.04, 0.07, 0.11, 0.88), 10, Vector4(10, 6, 14, 6))
 		var hh := HBoxContainer.new()
 		hh.add_theme_constant_override("separation", 8)
@@ -1702,7 +2240,7 @@ func _build_hud(base: Control) -> void:
 	meter_panel.offset_top = 80
 	var mv := VBoxContainer.new()
 	meter_panel.add_child(mv)
-	mv.add_child(_label("MULTÍMETRO  •  V DC", 13, Color("f2c218"), font_xbold))
+	mv.add_child(_label(T("MULTÍMETRO  •  V DC"), 13, Color("f2c218"), font_xbold))
 	var lcd := PanelContainer.new()
 	var lsb := StyleBoxFlat.new()
 	lsb.bg_color = Color("9fb39a")
@@ -1710,7 +2248,7 @@ func _build_hud(base: Control) -> void:
 	lsb.content_margin_left = 12
 	lsb.content_margin_right = 12
 	lcd.add_theme_stylebox_override("panel", lsb)
-	meter_label = _label("0.00 V", 44, Color("1b231b"), font_xbold)
+	meter_label = _label(T("0.00 V"), 44, Color("1b231b"), font_xbold)
 	meter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	lcd.add_child(meter_label)
 	mv.add_child(lcd)
@@ -1834,12 +2372,12 @@ func _set_hints(items: Array) -> void:
 
 
 func _update_hud_values() -> void:
-	day_label.text = "Dia %d" % day
+	day_label.text = T("Dia %d") % day
 	var m := int(minutes)
 	time_label.text = "%02d:%02d" % [m / 60, m % 60]
 	money_label.text = _eur(money)
 	level_label.text = str(level)
-	xp_label.text = "%d / 100 XP" % xp
+	xp_label.text = T("%d / 100 XP") % xp
 	xp_bar.value = xp
 
 
@@ -1895,6 +2433,14 @@ func _refresh_objective() -> void:
 		return
 	for c in objective_rows.get_children():
 		c.queue_free()
+	# story chapter + goal
+	var ch_title := _label(I18n.pick(_chapter()["title"]), 14, Color("8fd8ff"), font_xbold)
+	objective_rows.add_child(ch_title)
+	var goal := _label("➜ " + _chapter_goal_text(), 14, TEXT)
+	goal.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	goal.custom_minimum_size = Vector2(250, 0)
+	objective_rows.add_child(goal)
+	objective_rows.add_child(HSeparator.new())
 	if not jobs.has(focus_job) or jobs[focus_job]["done"]:
 		focus_job = ""
 		for id in jobs.keys():
@@ -1902,27 +2448,27 @@ func _refresh_objective() -> void:
 				focus_job = id
 				break
 	if focus_job == "":
-		objective_title.text = "Objetivo Atual"
+		objective_title.text = T("Objetivo Atual")
 		var waiting := 0
 		for o in orders:
 			if o["status"] == "new":
 				waiting += 1
-		objective_rows.add_child(_row("Não há trabalho na bancada", "done"))
-		objective_rows.add_child(_row("Abre os Pedidos (P) e aceita um cliente", "active"))
+		objective_rows.add_child(_row(T("Não há trabalho na bancada"), "done"))
+		objective_rows.add_child(_row(T("Abre os Pedidos (P) e aceita um cliente"), "active"))
 		if waiting > 0:
-			objective_rows.add_child(_label("%d cliente(s) à espera de resposta" % waiting, 13, YELLOW))
+			objective_rows.add_child(_label(T("%d cliente(s) à espera de resposta") % waiting, 13, YELLOW))
 		return
 	var id := focus_job
 	var j: Dictionary = jobs[id]
 	var o: Dictionary = j["order"]
-	objective_title.text = "%s de %s" % [_dev_name(id), o["customer"]]
+	objective_title.text = T("%s de %s") % [_dev_name(id), o["customer"]]
 	var s: int = j["step"]
 	var steps: Array = _fault(id)["steps"]
 	var items := [
-		["Examinar o %s" % _dev_name(id).to_lower(), s >= 1],
-		["Diagnosticar a avaria", bool(j["diagnosed"])],
-		["Reparar o equipamento", s >= steps.size() - 1],
-		["Testar e entregar", bool(j["done"])],
+		[T("Examinar o %s") % _dev_name(id).to_lower(), s >= 1],
+		[T("Diagnosticar a avaria"), bool(j["diagnosed"])],
+		[T("Reparar o equipamento"), s >= steps.size() - 1],
+		[T("Testar e entregar"), bool(j["done"])],
 	]
 	var active_set := false
 	for it in items:
@@ -1932,20 +2478,20 @@ func _refresh_objective() -> void:
 			active_set = true
 		objective_rows.add_child(_row(it[0], st))
 	var late := _abs_minutes() > float(o["deadline"])
-	objective_rows.add_child(_label("Prazo: %s%s" % [_clock_text(float(o["deadline"])), "  (atrasado!)" if late else ""], 13, Color("ffb4a8") if late else MUTED))
+	objective_rows.add_child(_label(T("Prazo: %s%s") % [_clock_text(float(o["deadline"])), T("  (atrasado!)") if late else ""], 13, Color("ffb4a8") if late else MUTED))
 	var others: Array = []
 	for other in jobs.keys():
 		if other != id and not jobs[other]["done"]:
 			others.append(_dev_name(other))
 	if not others.is_empty():
-		objective_rows.add_child(_label("Também na bancada: %s" % ", ".join(others), 13, MUTED))
+		objective_rows.add_child(_label(T("Também na bancada: %s") % ", ".join(others), 13, MUTED))
 
 
 func _refresh_repair_panel() -> void:
 	if active_device == "":
 		return
 	var id := active_device
-	repair_title.text = "Reparação: %s" % _dev_name(id)
+	repair_title.text = T("Reparação: %s") % _dev_name(id)
 	for c in repair_rows.get_children():
 		c.queue_free()
 	var j: Dictionary = jobs[id]
@@ -1954,9 +2500,9 @@ func _refresh_repair_panel() -> void:
 	var cur_group: int = steps[cur]["g"] if cur < steps.size() else 99
 	var groups: Array = _fault(id)["groups"]
 	for gi in range(groups.size()):
-		var text: String = groups[gi]
+		var text: String = T(groups[gi])
 		if gi == 1 and bool(j["diagnosed"]):
-			text += " (%s)" % _fault(id)["fault"]
+			text += T(" (%s)") % T(_fault(id)["fault"])
 		if gi == 2:
 			var total := 0
 			var done_count := 0
@@ -1965,17 +2511,17 @@ func _refresh_repair_panel() -> void:
 					total = int(steps[si].get("need", 1))
 					done_count = total if cur > si else (int(j["progress"]) if cur == si else 0)
 			if total > 0:
-				text += " (%d/%d)" % [done_count, total]
+				text += T(" (%d/%d)") % [done_count, total]
 		var st := "done" if gi < cur_group else ("active" if gi == cur_group else "todo")
 		repair_rows.add_child(_row(text, st))
 	if cur < steps.size():
 		var step: Dictionary = steps[cur]
 		var need: int = step.get("need", 1)
-		var extra := "  (%d/%d)" % [int(j["progress"]), need] if need > 1 else ""
-		step_hint.text = "➜ " + str(step["text"]) + extra + "\nFerramenta: " + _tool_need_text(step["tool"])
-		_set_hints([["mouse_l", str(step["verb"])], ["mouse_r", "Rodar"], ["TAB", "Ferramentas"], ["Esc", "Voltar"]])
+		var extra := T("  (%d/%d)") % [int(j["progress"]), need] if need > 1 else ""
+		step_hint.text = "➜ " + T(str(step["text"])) + extra + T("\nFerramenta: ") + _tool_need_text(step["tool"])
+		_set_hints([["mouse_l", T(str(step["verb"]))], ["mouse_r", T("Rodar")], ["TAB", T("Ferramentas")], ["Esc", T("Voltar")]])
 	else:
-		step_hint.text = "Reparação concluída!"
+		step_hint.text = T("Reparação concluída!")
 
 
 # --- orders board + parts shop -------------------------------------------------
@@ -2005,7 +2551,7 @@ func _build_board(base: Control) -> void:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 10)
 	v.add_child(tabs)
-	for t in [["orders", "Pedidos  (P)"], ["shop", "Loja de Peças  (L)"]]:
+	for t in [["orders", T("Pedidos  (P)")], ["shop", T("Loja de Peças  (L)")]]:
 		var b := Button.new()
 		b.text = t[1]
 		b.focus_mode = Control.FOCUS_NONE
@@ -2024,7 +2570,7 @@ func _build_board(base: Control) -> void:
 	tabs.add_child(money_l)
 	board_root.set_meta("money", money_l)
 	var close := Button.new()
-	close.text = "Fechar (Esc)"
+	close.text = T("Fechar (Esc)")
 	close.focus_mode = Control.FOCUS_NONE
 	close.pressed.connect(_close_board)
 	tabs.add_child(close)
@@ -2091,7 +2637,7 @@ func _refresh_board() -> void:
 			b.add_theme_stylebox_override("pressed", sb)
 			b.add_theme_color_override("font_color", Color("10161d") if sel else TEXT)
 			b.add_theme_color_override("font_hover_color", Color("10161d") if sel else TEXT)
-	(board_root.get_meta("money") as Label).text = "%s    ★ %.1f" % [_eur(money), _reputation()]
+	(board_root.get_meta("money") as Label).text = T("%s    ★ %.1f") % [_eur(money), _reputation()]
 	if board_kind == "orders":
 		_fill_orders()
 	else:
@@ -2100,9 +2646,9 @@ func _refresh_board() -> void:
 
 func _fill_orders() -> void:
 	if orders.is_empty():
-		board_box.add_child(_label("Ainda não há clientes. Vão chegando ao longo do dia.", 18, MUTED))
+		board_box.add_child(_label(T("Ainda não há clientes. Vão chegando ao longo do dia."), 18, MUTED))
 		return
-	var status_txt := {"new": ["NOVO PEDIDO", YELLOW], "accepted": ["NA FILA", Color("7fb3ff")], "repair": ["NA BANCADA", GREEN]}
+	var status_txt := {"new": [T("NOVO PEDIDO"), YELLOW], "accepted": [T("NA FILA"), Color("7fb3ff")], "repair": [T("NA BANCADA"), GREEN], "ready": [T("PRONTO — NO BALCÃO"), GREEN]}
 	for o in orders:
 		var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(14, 12, 14, 12))
 		card.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -2125,36 +2671,36 @@ func _fill_orders() -> void:
 		h.add_child(info)
 		var top := HBoxContainer.new()
 		top.add_theme_constant_override("separation", 10)
-		top.add_child(_label("%s  •  %s" % [o["customer"], _dev_name(o["device"])], 19, TEXT, font_xbold))
+		top.add_child(_label(T("%s  •  %s") % [o["customer"], _dev_name(o["device"])], 19, TEXT, font_xbold))
 		var st: Array = status_txt[o["status"]]
 		top.add_child(_label(st[0], 13, st[1], font_xbold))
 		info.add_child(top)
-		var q := _label("“%s”" % o["complaint"], 16, Color("d3dde8"))
+		var q := _label("“%s”" % T(o["complaint"]), 16, Color("d3dde8"))
 		q.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		q.custom_minimum_size = Vector2(420, 0)
 		info.add_child(q)
 		var part: String = FAULTS[o["fault"]]["part"]
 		var extra := ""
 		if part != "" and o["status"] != "new":
-			extra = "   •   Peça em stock: %d" % int(inventory.get(part, 0))
-		info.add_child(_label("Pagamento: %s   •   Prazo: %s%s" % [_eur(float(o["pay"])), _clock_text(float(o["deadline"])), extra], 14, MUTED))
+			extra = T("   •   Peça em stock: %d") % int(inventory.get(part, 0))
+		info.add_child(_label(T("Pagamento: %s   •   Prazo: %s%s") % [_eur(float(o["pay"])), _clock_text(float(o["deadline"])), extra], 14, MUTED))
 		var btns := VBoxContainer.new()
 		btns.add_theme_constant_override("separation", 6)
 		h.add_child(btns)
 		if o["status"] == "new":
-			var acc := _small_button("Aceitar", true)
+			var acc := _small_button(T("Aceitar"), true)
 			acc.pressed.connect(func() -> void: _accept_order(o))
 			btns.add_child(acc)
-			var dec := _small_button("Recusar", false)
+			var dec := _small_button(T("Recusar"), false)
 			dec.pressed.connect(func() -> void: _decline_order(o))
 			btns.add_child(dec)
 		elif o["status"] == "accepted":
-			btns.add_child(_label("Bancada ocupada", 13, MUTED))
+			btns.add_child(_label(T("Bancada ocupada"), 13, MUTED))
 		board_box.add_child(card)
 
 
 func _fill_shop() -> void:
-	board_box.add_child(_label("Entrega expresso: as peças chegam de imediato à prateleira.", 15, MUTED))
+	board_box.add_child(_label(T("Entrega expresso: as peças chegam de imediato à prateleira."), 15, MUTED))
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 10)
@@ -2170,10 +2716,10 @@ func _fill_shop() -> void:
 		card.add_child(h)
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_child(_label(str(pinfo["name"]), 17, TEXT, font_xbold))
-		info.add_child(_label("%s   •   Em stock: %d" % [_eur(float(pinfo["price"])), int(inventory.get(key, 0))], 14, MUTED))
+		info.add_child(_label(T(str(pinfo["name"])), 17, TEXT, font_xbold))
+		info.add_child(_label(T("%s   •   Em stock: %d") % [_eur(float(pinfo["price"])), int(inventory.get(key, 0))], 14, MUTED))
 		h.add_child(info)
-		var buy := _small_button("Comprar", true)
+		var buy := _small_button(T("Comprar"), true)
 		var k: String = key
 		buy.disabled = money < float(pinfo["price"])
 		buy.pressed.connect(func() -> void: _buy_part(k))
@@ -2184,12 +2730,12 @@ func _fill_shop() -> void:
 func _buy_part(key: String) -> void:
 	var price := float(Data.PARTS[key]["price"])
 	if money < price:
-		_toast("Dinheiro insuficiente.", true)
+		_toast(T("Dinheiro insuficiente."), true)
 		return
 	money -= price
 	day_profit -= price
 	inventory[key] = int(inventory.get(key, 0)) + 1
-	_toast("Comprado: %s (-%s)" % [Data.PARTS[key]["name"], _eur(price)], false, GREEN)
+	_toast(T("Comprado: %s (-%s)") % [T(Data.PARTS[key]["name"]), _eur(price)], false, GREEN)
 	_refresh_board()
 
 
@@ -2257,7 +2803,7 @@ void fragment() {
 	hb.alignment = BoxContainer.ALIGNMENT_CENTER
 	hb.add_theme_constant_override("separation", 10)
 	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for it in [["mouse", "Selecionar"], ["E", "Confirmar"], ["Esc", "Fechar"]]:
+	for it in [["mouse", T("Selecionar")], ["E", T("Confirmar")], ["Esc", T("Fechar")]]:
 		var p := _panel(Color(0.04, 0.07, 0.11, 0.9), 10, Vector4(12, 6, 14, 6))
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 8)
@@ -2332,16 +2878,16 @@ func _build_menu(base: Control) -> void:
 	menu_buttons = VBoxContainer.new()
 	menu_buttons.add_theme_constant_override("separation", 10)
 	col.add_child(menu_buttons)
-	menu_buttons.add_child(_menu_button("Começar Jogo", "play", true, _new_game))
-	load_button = _menu_button("Carregar Jogo", "folder", false, _continue_game)
+	menu_buttons.add_child(_menu_button(T("Começar Jogo"), "play", true, _new_game))
+	load_button = _menu_button(T("Carregar Jogo"), "folder", false, _continue_game)
 	menu_buttons.add_child(load_button)
-	menu_buttons.add_child(_menu_button("Definições", "gear", false, func() -> void: _show_menu_panel("settings")))
-	menu_buttons.add_child(_menu_button("Créditos", "info", false, func() -> void: _show_menu_panel("credits")))
-	menu_buttons.add_child(_menu_button("Sair", "power", false, func() -> void: get_tree().quit()))
+	menu_buttons.add_child(_menu_button(T("Definições"), "gear", false, func() -> void: _show_menu_panel("settings")))
+	menu_buttons.add_child(_menu_button(T("Créditos"), "info", false, func() -> void: _show_menu_panel("credits")))
+	menu_buttons.add_child(_menu_button(T("Sair"), "power", false, func() -> void: get_tree().quit()))
 	var fill := Control.new()
 	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(fill)
-	col.add_child(_label("%s  •  Compra, repara e revende" % VERSION, 14, Color(0.75, 0.82, 0.9, 0.7)))
+	col.add_child(_label(T("%s  •  Compra, repara e revende") % VERSION, 14, Color(0.75, 0.82, 0.9, 0.7)))
 	# right side host for settings / credits panels (inside the sidebar width)
 	menu_panel_host = Control.new()
 	menu_panel_host.anchor_bottom = 1.0
@@ -2355,7 +2901,7 @@ func _logo() -> Control:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", -14)
 	var neon := Color("8fd8ff")
-	for line in ["FIX & FLIP", "TECH"]:
+	for line in [T("FIX & FLIP"), T("TECH")]:
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 10)
 		var l := _label(line, 66, neon, font_xbold)
@@ -2366,7 +2912,7 @@ func _logo() -> Control:
 		l.add_theme_constant_override("shadow_offset_x", 0)
 		l.add_theme_constant_override("shadow_offset_y", 0)
 		h.add_child(l)
-		if line == "TECH":
+		if line == T("TECH"):
 			var gear := _icon("gear", 46, YELLOW)
 			gear.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			h.add_child(gear)
@@ -2385,7 +2931,7 @@ func _logo() -> Control:
 	sb.shadow_size = 12
 	pill.add_theme_stylebox_override("panel", sb)
 	pill.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	var pl := _label("Oficina de Eletrónica", 24, Color("bfeaff"), font_xbold)
+	var pl := _label(T("Oficina de Eletrónica"), 24, Color("bfeaff"), font_xbold)
 	pl.add_theme_color_override("font_outline_color", Color(0.1, 0.45, 1.0, 0.7))
 	pl.add_theme_constant_override("outline_size", 4)
 	pill.add_child(pl)
@@ -2434,6 +2980,16 @@ func _menu_button(text: String, icon_kind: String, primary: bool, action: Callab
 	return b
 
 
+func _rebuild_ui() -> void:
+	if ui:
+		ui.queue_free()
+	ui = null
+	hotbar_slots.clear()
+	_build_ui()
+	_show_menu()
+	_show_menu_panel("settings")
+
+
 func _show_menu_panel(which: String) -> void:
 	for c in menu_panel_host.get_children():
 		c.queue_free()
@@ -2445,10 +3001,10 @@ func _show_menu_panel(which: String) -> void:
 	v.add_theme_constant_override("separation", 12)
 	p.add_child(v)
 	if which == "settings":
-		v.add_child(_label("Definições", 24, YELLOW, font_xbold))
-		v.add_child(_label("Qualidade gráfica", 16, MUTED))
+		v.add_child(_label(T("Definições"), 24, YELLOW, font_xbold))
+		v.add_child(_label(T("Qualidade gráfica"), 16, MUTED))
 		var q := OptionButton.new()
-		for t in ["Baixa (PC fraco)", "Média", "Alta (SSIL, reflexos, nevoeiro)"]:
+		for t in [T("Baixa (PC fraco)"), T("Média"), T("Alta (SSIL, reflexos, nevoeiro)")]:
 			q.add_item(t)
 		q.selected = int(settings["quality"])
 		q.item_selected.connect(func(i: int) -> void:
@@ -2456,7 +3012,18 @@ func _show_menu_panel(which: String) -> void:
 			_apply_settings()
 			_save_settings())
 		v.add_child(q)
-		v.add_child(_label("Sensibilidade do rato", 16, MUTED))
+		v.add_child(_label(T("Idioma / Language"), 16, MUTED))
+		var lang := OptionButton.new()
+		lang.add_item("Português")
+		lang.add_item("English")
+		lang.selected = 1 if I18n.lang == "en" else 0
+		lang.item_selected.connect(func(i: int) -> void:
+			settings["lang"] = "en" if i == 1 else "pt"
+			I18n.lang = settings["lang"]
+			_save_settings()
+			_rebuild_ui())
+		v.add_child(lang)
+		v.add_child(_label(T("Sensibilidade do rato"), 16, MUTED))
 		var s := HSlider.new()
 		s.min_value = 0.3
 		s.max_value = 2.5
@@ -2467,7 +3034,7 @@ func _show_menu_panel(which: String) -> void:
 			_save_settings())
 		v.add_child(s)
 		var fs := CheckButton.new()
-		fs.text = "Ecrã inteiro"
+		fs.text = T("Ecrã inteiro")
 		fs.button_pressed = bool(settings["fullscreen"])
 		fs.toggled.connect(func(on: bool) -> void:
 			settings["fullscreen"] = on
@@ -2475,12 +3042,12 @@ func _show_menu_panel(which: String) -> void:
 			_save_settings())
 		v.add_child(fs)
 	else:
-		v.add_child(_label("Créditos", 24, YELLOW, font_xbold))
-		var t := _label("Fix & Flip Tech — protótipo de simulação de oficina.\n\nModelos 3D, materiais e animações gerados por código no Godot 4.\nTipo de letra: Nunito (SIL Open Font License).\n\nObrigado por jogares!", 16, TEXT)
+		v.add_child(_label(T("Créditos"), 24, YELLOW, font_xbold))
+		var t := _label(T("Fix & Flip Tech — protótipo de simulação de oficina.\n\nModelos 3D, materiais e animações gerados por código no Godot 4.\nTipo de letra: Nunito (SIL Open Font License).\n\nObrigado por jogares!"), 16, TEXT)
 		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		t.custom_minimum_size = Vector2(316, 0)
 		v.add_child(t)
-	var close := _menu_button("Voltar", "play", false, func() -> void:
+	var close := _menu_button(T("Voltar"), "play", false, func() -> void:
 		for c in menu_panel_host.get_children():
 			c.queue_free())
 	v.add_child(close)
@@ -2511,7 +3078,13 @@ func _new_game() -> void:
 	day_profit = 0
 	ratings = []
 	inventory = {"battery": 1, "phone_screen": 1}
+	story_chapter = 0
+	story_deliveries = 0
+	story_flags = {}
+	rent_due_day = 0
+	rent_amount = Story.RENT
 	_reset_jobs()
+	_clear_customers()
 	orders.clear()
 	_save_game()
 	_start_game(true)
@@ -2520,6 +3093,7 @@ func _new_game() -> void:
 func _continue_game() -> void:
 	if _load_game():
 		_reset_jobs()
+		_clear_customers()
 		orders.clear()
 		_start_game(false)
 
@@ -2543,15 +3117,14 @@ func _start_game(first: bool) -> void:
 		hints_bar.hide()
 		_hotbar_compact(false)
 		focus_job = ""
-		next_order_at = _abs_minutes() + 40.0
-		_new_order(true)
-		_new_order(true)
+		next_order_at = _abs_minutes() + 60.0
 		_refresh_objective()
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		if first:
-			_toast("Bem-vindo à oficina! Tens clientes à espera: carrega P para ver os pedidos.", false, YELLOW)
+			_story_begin()
 		else:
-			_toast("Bem-vindo de volta! Carrega P para ver os pedidos.", false, YELLOW))
+			_morning_orders()
+			_toast(T("Bem-vindo de volta! Os clientes esperam no balcão."), false, YELLOW))
 	tw.tween_property(fade, "color:a", 0.0, 0.5)
 
 
@@ -2578,15 +3151,15 @@ func _build_pause(base: Control) -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
 	p.add_child(v)
-	v.add_child(_label("Pausa", 28, YELLOW, font_xbold))
-	v.add_child(_menu_button("Continuar", "play", true, _resume))
-	v.add_child(_menu_button("Guardar Jogo", "folder", false, func() -> void:
+	v.add_child(_label(T("Pausa"), 28, YELLOW, font_xbold))
+	v.add_child(_menu_button(T("Continuar"), "play", true, _resume))
+	v.add_child(_menu_button(T("Guardar Jogo"), "folder", false, func() -> void:
 		_save_game()
-		_toast("Jogo guardado.", false, GREEN)))
-	v.add_child(_menu_button("Menu Principal", "info", false, func() -> void:
+		_toast(T("Jogo guardado."), false, GREEN)))
+	v.add_child(_menu_button(T("Menu Principal"), "info", false, func() -> void:
 		_save_game()
 		_show_menu()))
-	v.add_child(_menu_button("Sair", "power", false, func() -> void:
+	v.add_child(_menu_button(T("Sair"), "power", false, func() -> void:
 		_save_game()
 		get_tree().quit()))
 	pause_root.hide()

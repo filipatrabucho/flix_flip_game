@@ -5,6 +5,7 @@ extends Control
 signal chosen(id: String)
 
 const Tools = preload("res://scripts/tools3d.gd")
+const I18n = preload("res://scripts/i18n.gd")
 const ORDER := ["screwdriver", "air", "multimeter", "cloth", "brush"]
 const R_OUT := 230.0
 const R_IN := 92.0
@@ -100,8 +101,8 @@ func confirm() -> void:
 
 
 func _refresh() -> void:
-	_title.text = Tools.NAMES.get(current, "")
-	_desc.text = Tools.DESCRIPTIONS.get(current, "")
+	_title.text = I18n.t(Tools.NAMES.get(current, ""))
+	_desc.text = I18n.t(Tools.DESCRIPTIONS.get(current, ""))
 	for id in _icon_nodes.keys():
 		var tr: TextureRect = _icon_nodes[id]
 		tr.modulate = Color(1, 1, 1, 1) if id == current else Color(0.82, 0.86, 0.92, 0.9)

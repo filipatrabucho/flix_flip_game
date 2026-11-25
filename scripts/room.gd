@@ -11,6 +11,10 @@ const ROOM_H := 2.8
 const BENCH_Y := 0.92
 const BENCH_Z := -1.325
 const MAT_Y := 0.923
+const I18n = preload("res://scripts/i18n.gd")
+const COUNTER_Z := 1.55
+const COUNTER_TOP := 1.02
+const DOOR_X := 2.0
 
 var root: Node3D
 var env: Environment
@@ -19,6 +23,8 @@ var lamp_light: SpotLight3D
 var sun: DirectionalLight3D
 var probe: ReflectionProbe
 var spot_lights: Array[Light3D] = []
+var door: Node3D
+var bell: Node3D
 var rng := RandomNumberGenerator.new()
 
 
@@ -40,6 +46,8 @@ func build(parent: Node3D) -> Node3D:
 	_plants()
 	_decor()
 	_floor_props()
+	_counter()
+	_door()
 	return root
 
 
@@ -118,7 +126,11 @@ func _shell() -> void:
 	# side + front walls
 	Kit.box(root, Vector3(0.1, ROOM_H, ROOM_FRONT - ROOM_BACK), wall, Vector3(-ROOM_X - 0.05, ROOM_H * 0.5, (ROOM_FRONT + ROOM_BACK) * 0.5))
 	Kit.box(root, Vector3(0.1, ROOM_H, ROOM_FRONT - ROOM_BACK), wall, Vector3(ROOM_X + 0.05, ROOM_H * 0.5, (ROOM_FRONT + ROOM_BACK) * 0.5))
-	Kit.box(root, Vector3(ROOM_X * 2.0, ROOM_H, 0.1), wall, Vector3(0, ROOM_H * 0.5, ROOM_FRONT + 0.05))
+	# front wall with the shop door (x 1.55..2.45, h 2.1)
+	var fz := ROOM_FRONT + 0.05
+	Kit.box(root, Vector3(4.15, ROOM_H, 0.1), wall, Vector3(-0.525, ROOM_H * 0.5, fz))
+	Kit.box(root, Vector3(0.15, ROOM_H, 0.1), wall, Vector3(2.525, ROOM_H * 0.5, fz))
+	Kit.box(root, Vector3(0.9, ROOM_H - 2.1, 0.1), wall, Vector3(2.0, 2.1 + (ROOM_H - 2.1) * 0.5, fz))
 	var ceil := Kit.mat(Color("1b222c"), 0.9)
 	Kit.box(root, Vector3(ROOM_X * 2.0, 0.1, ROOM_FRONT - ROOM_BACK), ceil, Vector3(0, ROOM_H + 0.05, (ROOM_FRONT + ROOM_BACK) * 0.5))
 	# skirting board
@@ -604,3 +616,160 @@ func _floor_props() -> void:
 	# small trash/recycling bin for old parts
 	Kit.cyl(root, 0.15, 0.4, Kit.plastic(Color("2e7d32"), 0.5), Vector3(-1.7, 0.2, -0.3), Vector3.ZERO, 0.13, 32)
 	Kit.cyl(root, 0.155, 0.02, Kit.plastic(Color("1b5e20"), 0.5), Vector3(-1.7, 0.41, -0.3))
+
+
+# -----------------------------------------------------------------------------
+# Shop counter + entrance (customers come in through the door)
+# -----------------------------------------------------------------------------
+func _counter() -> void:
+	var z := COUNTER_Z
+	var x0 := -0.5
+	var x1 := 1.5
+	var cx := (x0 + x1) * 0.5
+	var w := x1 - x0
+	var wood := Kit.pbr("walnut_pbr", 0.5, 0.0, Color("caa27c"), Vector3(1.4, 1.4, 1.4), true, 0.5)
+	wood.clearcoat_enabled = true
+	wood.clearcoat = 0.4
+	var front := Kit.mat(Color("1f3550"), 0.55, 0.1)
+	# body: customer side panel faces +Z
+	Kit.box(root, Vector3(w, COUNTER_TOP - 0.05, 0.5), front, Vector3(cx, (COUNTER_TOP - 0.05) * 0.5, z))
+	Kit.slab(root, Vector3(w + 0.08, 0.05, 0.62), 0.012, 0.008, wood, wood, wood, Vector3(cx, COUNTER_TOP - 0.025, z))
+	# slatted wood front + kick plate + LED strip
+	for i in range(18):
+		Kit.box(root, Vector3(0.07, 0.82, 0.02), Kit.pbr("walnut_pbr", 0.6, 0.0, Color("b98a62"), Vector3(2, 2, 2), true), Vector3(x0 + 0.06 + i * (w - 0.12) / 17.0, 0.5, z + 0.26))
+	Kit.box(root, Vector3(w, 0.08, 0.02), Kit.mat(Color("15181c"), 0.5, 0.4), Vector3(cx, 0.04, z + 0.265))
+	Kit.box(root, Vector3(w - 0.04, 0.012, 0.012), Kit.emissive(Color("3aa8ff"), 3.0, true), Vector3(cx, COUNTER_TOP - 0.06, z + 0.27))
+	# neon logo on the front
+	var logo := Label3D.new()
+	logo.text = "FIX & FLIP"
+	logo.font_size = 96
+	logo.pixel_size = 0.0011
+	logo.modulate = Color(0.55, 0.85, 2.4)
+	logo.outline_modulate = Color(0.05, 0.35, 1.0, 0.8)
+	logo.outline_size = 16
+	logo.shaded = false
+	var f := load("res://assets/fonts/Nunito-ExtraBold.ttf")
+	if f:
+		logo.font = f
+	logo.position = Vector3(cx, 0.62, z + 0.285)
+	root.add_child(logo)
+	# cash register
+	var reg := Kit.plastic(Color("2b2f36"), 0.4)
+	var rp := Vector3(x0 + 0.35, COUNTER_TOP, z - 0.08)
+	Kit.slab(root, Vector3(0.34, 0.09, 0.3), 0.02, 0.01, reg, null, null, rp + Vector3(0, 0.045, 0))
+	Kit.slab(root, Vector3(0.24, 0.02, 0.14), 0.01, 0.005, Kit.plastic(Color("d9dde2"), 0.4), null, null, rp + Vector3(0, 0.1, 0.05), Vector3(-15, 0, 0))
+	var scr := Kit.slab(root, Vector3(0.22, 0.14, 0.015), 0.008, 0.005, reg, null, null, rp + Vector3(0, 0.2, -0.08), Vector3(-12, 0, 0))
+	scr.name = "RegisterScreen"
+	Kit.box(root, Vector3(0.19, 0.11, 0.002), Kit.emissive(Color("2ecc71"), 1.2, true), rp + Vector3(0, 0.2, -0.071)).rotation_degrees.x = -12
+	# card terminal + service bell + business cards + tablet
+	Kit.slab(root, Vector3(0.075, 0.03, 0.14), 0.012, 0.008, Kit.plastic(Color("1b1d21"), 0.4), null, null, Vector3(x0 + 0.68, COUNTER_TOP + 0.015, z + 0.14), Vector3(0, 15, 0))
+	Kit.box(root, Vector3(0.055, 0.003, 0.04), Kit.emissive(Color("6ec6ff"), 0.8, true), Vector3(x0 + 0.68, COUNTER_TOP + 0.031, z + 0.12)).rotation_degrees.y = 15
+	bell = Node3D.new()
+	bell.position = Vector3(cx + 0.35, COUNTER_TOP, z + 0.16)
+	root.add_child(bell)
+	Kit.cyl(bell, 0.045, 0.012, Kit.mat(Color("2a2a2a"), 0.4, 0.6), Vector3(0, 0.006, 0))
+	Kit.sphere(bell, 0.04, Kit.chrome(Color("e6c56a")), Vector3(0, 0.02, 0), Vector3(1, 0.85, 1))
+	Kit.cyl(bell, 0.005, 0.015, Kit.chrome(), Vector3(0, 0.06, 0))
+	for i in range(5):
+		Kit.box(root, Vector3(0.085, 0.002, 0.055), Kit.mat(Color("f4f1ea"), 0.7), Vector3(cx + 0.12, COUNTER_TOP + 0.001 + i * 0.002, z + 0.18)).rotation_degrees.y = randf_range(-6, 6)
+	var tab := Kit.slab(root, Vector3(0.2, 0.012, 0.28), 0.015, 0.005, Kit.plastic(Color("17191c"), 0.3), null, null, Vector3(x1 - 0.3, COUNTER_TOP + 0.015, z - 0.05), Vector3(10, -20, 0))
+	tab.name = "OrdersTablet"
+	var tl := Label3D.new()
+	tl.text = I18n.t("PEDIDOS  [P]")
+	tl.font_size = 40
+	tl.pixel_size = 0.0007
+	tl.modulate = Color("f5b82e")
+	tl.shaded = false
+	tl.position = Vector3(x1 - 0.3, COUNTER_TOP + 0.03, z - 0.05)
+	tl.rotation_degrees = Vector3(-80, -20, 0)
+	root.add_child(tl)
+	# small plant + "repaired devices" shelf behind the counter
+	Kit.cyl(root, 0.05, 0.08, Kit.mat(Color("e8e1d6"), 0.6), Vector3(x1 - 0.08, COUNTER_TOP + 0.04, z + 0.18), Vector3.ZERO, 0.04)
+	var leaf := Kit.leaf_mesh(0.06, 0.04, 0.3)
+	var lm := Kit.mat(Color("4f9a45"), 0.5)
+	lm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	for i in range(10):
+		var a := TAU * i / 10.0
+		var p := Vector3(x1 - 0.08 + cos(a) * 0.02, COUNTER_TOP + 0.09, z + 0.18 + sin(a) * 0.02)
+		var l := Kit.mi(root, leaf, lm, p)
+		l.look_at_from_position(p, p + Vector3(cos(a), 0.6, sin(a)), Vector3.UP)
+	# pendant lamp above the counter
+	var top := Vector3(cx, ROOM_H, z)
+	Kit.cyl(root, 0.003, 0.5, Kit.mat(Color("111111"), 0.6), top + Vector3(0, -0.25, 0))
+	var shade := Kit.mat(Color("d9a441"), 0.35, 0.6)
+	Kit.cyl(root, 0.2, 0.18, shade, top + Vector3(0, -0.6, 0), Vector3.ZERO, 0.05, 40)
+	Kit.sphere(root, 0.05, Kit.emissive(Color("fff0d2"), 5.0, true), top + Vector3(0, -0.66, 0))
+	var sp := SpotLight3D.new()
+	sp.position = top + Vector3(0, -0.68, 0)
+	sp.rotation_degrees = Vector3(-90, 0, 0)
+	sp.light_color = Color("ffdcae")
+	sp.light_energy = 3.0
+	sp.spot_range = 3.2
+	sp.spot_angle = 60.0
+	sp.shadow_enabled = true
+	root.add_child(sp)
+	spot_lights.append(sp)
+	# shop-side lighting
+	var o := OmniLight3D.new()
+	o.position = Vector3(1.2, 2.3, 2.2)
+	o.light_color = Color("ffe0b8")
+	o.light_energy = 0.8
+	o.omni_range = 3.5
+	root.add_child(o)
+	# collision so the hand ray / props behave
+	var b := Kit.static_body(root, Kit.box_shape(Vector3(w, COUNTER_TOP, 0.6)), Vector3(cx, COUNTER_TOP * 0.5, z))
+	b.collision_layer = 2
+
+
+func _door() -> void:
+	var fz := ROOM_FRONT + 0.05
+	var frame := Kit.mat(Color("15181c"), 0.4, 0.6)
+	Kit.box(root, Vector3(0.06, 2.12, 0.14), frame, Vector3(DOOR_X - 0.45, 1.06, fz))
+	Kit.box(root, Vector3(0.06, 2.12, 0.14), frame, Vector3(DOOR_X + 0.45, 1.06, fz))
+	Kit.box(root, Vector3(0.96, 0.06, 0.14), frame, Vector3(DOOR_X, 2.12, fz))
+	door = Node3D.new()
+	door.name = "Door"
+	door.position = Vector3(DOOR_X - 0.42, 0, fz)
+	root.add_child(door)
+	var leaf := Kit.mat(Color("1d2a38"), 0.4, 0.4)
+	Kit.box(door, Vector3(0.84, 2.06, 0.04), leaf, Vector3(0.42, 1.03, 0))
+	Kit.box(door, Vector3(0.6, 1.1, 0.012), Kit.glass(Color(0.8, 0.9, 1.0), 0.05, 0.25), Vector3(0.42, 1.35, 0))
+	Kit.cyl(door, 0.012, 0.3, Kit.chrome(), Vector3(0.74, 1.05, -0.05))
+	var sign := Label3D.new()
+	sign.text = I18n.t("ABERTO")
+	sign.font_size = 64
+	sign.pixel_size = 0.0012
+	sign.modulate = Color(2.2, 0.6, 0.4)
+	sign.outline_size = 10
+	sign.outline_modulate = Color(1, 0.2, 0.1, 0.7)
+	sign.shaded = false
+	sign.position = Vector3(0.42, 1.55, -0.03)
+	sign.rotation_degrees = Vector3(0, 180, 0)
+	door.add_child(sign)
+	# street outside the door (simple, lit)
+	Kit.box(root, Vector3(3.0, 0.05, 2.0), Kit.pbr("concrete_pbr", 0.9, 0.0, Color("6c6f74"), Vector3(1, 1, 1), true), Vector3(DOOR_X, -0.025, fz + 1.05))
+	var street := QuadMesh.new()
+	street.size = Vector2(4.0, 3.0)
+	var sm := StandardMaterial3D.new()
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sm.albedo_color = Color("3b4766")
+	Kit.mi(root, street, sm, Vector3(DOOR_X, 1.5, fz + 2.0), Vector3(0, 180, 0))
+	# doormat
+	Kit.slab(root, Vector3(0.8, 0.012, 0.5), 0.02, 0.004, Kit.rubber(Color("2b2f36")), null, null, Vector3(DOOR_X, 0.006, ROOM_FRONT - 0.35))
+
+
+func open_door() -> void:
+	if door == null:
+		return
+	var t := door.create_tween()
+	t.tween_property(door, "rotation:y", deg_to_rad(-80), 0.35)
+	t.tween_interval(1.0)
+	t.tween_property(door, "rotation:y", 0.0, 0.5)
+
+
+func ring_bell() -> void:
+	if bell == null:
+		return
+	var t := bell.create_tween()
+	t.tween_property(bell, "scale", Vector3(1.1, 0.85, 1.1), 0.06)
+	t.tween_property(bell, "scale", Vector3.ONE, 0.12)

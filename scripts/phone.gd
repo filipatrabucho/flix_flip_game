@@ -1,4 +1,6 @@
 extends "res://scripts/device_base.gd"
+
+const I18n = preload("res://scripts/i18n.gd")
 ## Modern smartphone at real scale (71.6 x 7.8 x 147.6 mm), lying screen up.
 ## Body frame: origin = centre, +Z = bottom edge (USB-C), +Y = screen side.
 
@@ -144,7 +146,7 @@ func _build_screen_assembly(broken: bool) -> Node3D:
 		crack_mesh = Kit.mi(n, crack_plane, _crack_mat, Vector3(0, ST + 0.00006, 0))
 		crack_mesh.name = "Cracks"
 	else:
-		label3d(n, "PROTEÇÃO", 26, 0.00008, Color(0.7, 0.85, 1.0, 0.8), Vector3(0, ST + 0.00012, 0.05)).name = "FilmLabel"
+		label3d(n, I18n.t("PROTEÇÃO"), 26, 0.00008, Color(0.7, 0.85, 1.0, 0.8), Vector3(0, ST + 0.00012, 0.05)).name = "FilmLabel"
 		var film := Kit.glass(Color(0.75, 0.88, 1.0), 0.2, 0.18)
 		Kit.slab(n, Vector3(W - 0.0006, 0.0001, L - 0.0006), 0.0101, 0.00005, film, null, null, Vector3(0, ST + 0.00008, 0)).name = "Film"
 		var tab := Kit.slab(n, Vector3(0.012, 0.0001, 0.010), 0.002, 0.00005, Kit.plastic(Color("2f80ed"), 0.5), null, null, Vector3(0, ST + 0.0001, L * 0.5 + 0.004))
@@ -233,7 +235,7 @@ func _build_screen_viewport() -> SubViewport:
 		t.add_theme_color_override("font_color", Color.WHITE)
 		_lock.add_child(t)
 		var d := Label.new()
-		d.text = "segunda-feira, 1 de março"
+		d.text = I18n.t("segunda-feira, 1 de março")
 		d.size = Vector2(360, 40)
 		d.position = Vector2(0, 84)
 		d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
