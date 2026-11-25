@@ -491,8 +491,8 @@ func remove_battery(aside_global: Vector3) -> Tween:
 func spawn_new_battery(global_pos: Vector3) -> void:
 	new_battery = _battery_model(false)
 	add_child(new_battery)
-	new_battery.global_position = global_pos + Vector3(0, 0.0045, 0)
-	new_battery.rotation_degrees = Vector3(180, 12, 0)
+	new_battery.global_position = global_pos
+	new_battery.rotation_degrees = Vector3(180, 84, 0)
 	add_target("new_battery", new_battery, Kit.box_shape(Vector3(0.24, 0.01, 0.08)), Vector3(0, -0.002, 0), new_battery.get_meta("meshes"), 0.0)
 
 

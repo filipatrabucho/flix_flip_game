@@ -29,7 +29,7 @@ const PHONE_POS := Vector3(0.29, MAT_Y, -1.17)
 const TRAY_POS := Vector3(0.24, MAT_Y, -1.47)
 const COVER_ASIDE := Vector3(-0.15, MAT_Y - 0.0046, -1.565)
 const OLD_PART_BIN := Vector3(-1.7, 0.45, -0.3)
-const NEW_BATTERY_POS := Vector3(-0.13, MAT_Y + 0.0002, -1.015)
+const NEW_BATTERY_POS := Vector3(0.115, MAT_Y + 0.0002, -1.24)
 const NEW_SCREEN_POS := Vector3(0.475, MAT_Y + 0.0002, -1.2)
 const OLD_SCREEN_ASIDE := Vector3(0.47, MAT_Y + 0.0003, -1.42)
 
@@ -906,7 +906,7 @@ func _run_enter(id: String, what: String) -> float:
 			return 1.9
 		"spawn_battery":
 			d.spawn_new_battery(NEW_BATTERY_POS)
-			_toast("Bateria nova colocada à frente do portátil.")
+			_toast("Bateria nova pronta ao lado do portátil.")
 			return 0.0
 		"spawn_screen":
 			d.spawn_new_screen(NEW_SCREEN_POS)
