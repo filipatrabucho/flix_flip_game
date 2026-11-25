@@ -2228,6 +2228,7 @@ func _build_hud(base: Control) -> void:
 			bp.add_child(orders_badge)
 			hh.add_child(bp)
 			orders_badge.set_meta("wrap", bp)
+			bp.visible = false
 		sc.add_child(pp)
 	hud.set_meta("shortcuts", sc)
 
@@ -2424,6 +2425,9 @@ func _row(text: String, state: String) -> Control:
 	var kind := "check" if state == "done" else ("box_active" if state == "active" else "box")
 	h.add_child(_icon(kind, 18, Color(1, 1, 1, 0.55)))
 	var l := _label(text, 16, TEXT if state != "todo" else Color(0.85, 0.9, 0.95, 0.8))
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(225, 0)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(l)
 	return wrap
 
