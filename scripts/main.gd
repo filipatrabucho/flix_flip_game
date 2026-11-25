@@ -1048,6 +1048,8 @@ func _perform(id: String, act: String, target: String) -> float:
 			_toast(T("O ecrã pisca com riscos... parece danificado."))
 			return 1.0
 		"wipe":
+			if not d.has_method("wipe"):
+				return 0.55
 			if d.wipe():
 				jobs[id]["diagnosed"] = true
 				_toast(T("Vidro e painel rachados. Avaria: ECRÃ PARTIDO"), false, GREEN)
@@ -1065,7 +1067,7 @@ func _perform(id: String, act: String, target: String) -> float:
 			d.close_screen()
 			return 0.95
 		"blow_port":
-			_dust_puff(d.targets["port"].global_position)
+			_dust_puff(d.targets[target].global_position)
 			return 0.6
 		"pad_on":
 			d.set_led(true)
