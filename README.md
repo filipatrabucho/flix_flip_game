@@ -1,4 +1,4 @@
-# Fix & Flip Tech — v0.9
+# Fix & Flip Tech — v1.0
 
 Simulador de oficina de eletrónica em **Godot 4** (Forward+). Compra equipamentos avariados, repara-os passo a passo com as mãos (de luva) e ferramentas reais, e revende com lucro.
 
@@ -35,12 +35,31 @@ Simulador de oficina de eletrónica em **Godot 4** (Forward+). Compra equipament
 | Telemóvel | Ecrã partido, Bateria inchada, Porta de carregamento suja |
 | Comando | Drift do analógico, Botões presos |
 
+## História: «A Oficina do Avô Júlio» (v1.0)
+
+Herdaste a velha oficina do Avô Júlio numa vila pequena. Tudo começa com uma carta dele. Depois aparece o Sr. Armando, o senhorio rabugento: há renda para pagar e a oficina pode fechar.
+
+1. **A Oficina do Avô**: as primeiras reparações. A Dona Rosa, da florista ao lado, é a primeira cliente.
+2. **A Renda**: junta 300 € até ao fim do Dia 3.
+3. **Boca a Boca**: o Leo traz o comando e a fama da oficina cresce. A Marta, jornalista, escreve sobre ti.
+4. **O Portátil do Avô**: o Sr. Armando traz o portátil antigo do teu avô. O que estará lá dentro?
+
+Depois do fim da história o jogo continua em modo livre.
+
+## Balcão com clientes 3D
+
+Os clientes entram pela porta da loja, fazem fila no balcão e esperam com um **!** por cima da cabeça. Olha para eles e carrega **E** para ouvires a queixa e aceitares ou recusares o trabalho. Quando a reparação acaba, o cliente volta ao balcão (**✓**) para levantar o equipamento e pagar.
+
+## Idiomas
+
+Português e English: Definições → Idioma / Language.
+
 ## Controlos
 
 | Tecla | Ação |
 | --- | --- |
 | WASD + rato | Andar e olhar |
-| E | Interagir (reparar / pegar ferramenta) |
+| E | Interagir (falar com clientes / reparar / pegar ferramenta) |
 | P | Pedidos dos clientes |
 | L | Loja de peças |
 | 1–5 / roda do rato | Escolher ferramenta |

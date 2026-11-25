@@ -18,7 +18,7 @@ const Radial = preload("res://scripts/radial_menu.gd")
 
 const SAVE_PATH := "user://fix_flip_save.json"
 const SETTINGS_PATH := "user://fix_flip_settings.cfg"
-const VERSION := "v0.9"
+const VERSION := "v1.0"
 
 const YELLOW := Color("f5b82e")
 const PANEL_BG := Color(0.035, 0.06, 0.1, 0.84)
