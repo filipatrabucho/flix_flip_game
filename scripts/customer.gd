@@ -86,7 +86,7 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	var chest := Kit.capsule(torso, 0.19, 0.62, shirt, Vector3(0, 0.3, 0))
 	chest.scale = Vector3(1.0, 1.0, 0.68)
 	Kit.cyl(torso, 0.17, 0.05, shirt, Vector3(0, 0.08, 0)).scale = Vector3(1.05, 1, 0.75)
-	Kit.cyl(torso, 0.055, 0.1, skin, Vector3(0, 0.62, 0))
+	Kit.cyl(torso, 0.055, 0.09, skin, Vector3(0, 0.63, 0))
 	# arms
 	for side in [-1.0, 1.0]:
 		var arm := Node3D.new()
@@ -103,7 +103,7 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 			arm_r = arm
 	# head
 	head = Node3D.new()
-	head.position = Vector3(0, 0.74, 0)
+	head.position = Vector3(0, 0.69, 0)
 	torso.add_child(head)
 	Kit.sphere(head, 0.125, skin, Vector3(0, 0.1, 0), Vector3(0.95, 1.08, 1.0))
 	Kit.sphere(head, 0.03, skin, Vector3(-0.122, 0.09, 0), Vector3(0.5, 1, 0.8))
@@ -157,21 +157,21 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	name_tag = Label3D.new()
 	name_tag.text = display_name
 	name_tag.font_size = 48
-	name_tag.pixel_size = 0.0022
+	name_tag.pixel_size = 0.0013
 	name_tag.outline_size = 10
 	name_tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	name_tag.no_depth_test = true
-	name_tag.position = Vector3(0, 1.98, 0)
+	name_tag.position = Vector3(0, 1.88, 0)
 	name_tag.modulate = Color("eef3f8")
 	add_child(name_tag)
 	bubble = Label3D.new()
 	bubble.font_size = 96
-	bubble.pixel_size = 0.0025
+	bubble.pixel_size = 0.0017
 	bubble.outline_size = 18
 	bubble.outline_modulate = Color(0, 0, 0, 0.8)
 	bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	bubble.no_depth_test = true
-	bubble.position = Vector3(0, 2.18, 0)
+	bubble.position = Vector3(0, 2.02, 0)
 	add_child(bubble)
 	set_bubble("")
 	# pick shape
@@ -286,4 +286,4 @@ func _process(delta: float) -> void:
 	else:
 		head.rotation.y = lerp_angle(head.rotation.y, 0.0, minf(1.0, delta * 5.0))
 	if bubble.visible:
-		bubble.position.y = 2.18 + sin(t * 3.0) * 0.03
+		bubble.position.y = 2.02 + sin(t * 3.0) * 0.03

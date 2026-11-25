@@ -711,9 +711,9 @@ func _counter() -> void:
 	spot_lights.append(sp)
 	# shop-side lighting
 	var o := OmniLight3D.new()
-	o.position = Vector3(1.2, 2.3, 2.2)
+	o.position = Vector3(1.0, 2.2, 1.9)
 	o.light_color = Color("ffe0b8")
-	o.light_energy = 0.8
+	o.light_energy = 1.3
 	o.omni_range = 3.5
 	root.add_child(o)
 	# collision so the hand ray / props behave
