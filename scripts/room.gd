@@ -520,7 +520,7 @@ func _plants() -> void:
 	Kit.cyl(root, 0.045, 0.07, Kit.mat(Color("2f3640"), 0.6), bp + Vector3(0, 0.035, 0), Vector3.ZERO, 0.038)
 	_bush(bp + Vector3(0, 0.075, 0), 0.05, 14, leaf_mesh, leaf_mats)
 	# floor plant in the corner
-	var fp := Vector3(2.25, 0, 0.0)
+	var fp := Vector3(2.25, 0, -0.4)
 	Kit.cyl(root, 0.18, 0.4, Kit.mat(Color("2b2f36"), 0.5), fp + Vector3(0, 0.2, 0), Vector3.ZERO, 0.14)
 	for i in range(9):
 		var a := TAU * i / 9.0

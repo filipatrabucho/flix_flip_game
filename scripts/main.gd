@@ -1662,7 +1662,7 @@ func _start_carry(o: Dictionary) -> void:
 	cam.add_child(carry_node)
 	var st := _device_standin(str(o["device"]))
 	carry_node.add_child(st)
-	carry_node.position = Vector3(0.0, -0.24, -0.5)
+	carry_node.position = Vector3(0.0, -0.17, -0.5)
 	carry_node.rotation_degrees = Vector3(10, 0, 0)
 	_equip("none")
 
@@ -1708,7 +1708,8 @@ func _shelf_place(i: int) -> void:
 	if not customers.has(int(o["id"])):
 		get_tree().create_timer(randf_range(3.0, 6.0)).timeout.connect(func() -> void:
 			if o["status"] in ["shelf", "carried"]:
-				_spawn_customer(o, "pickup"))
+				_spawn_customer(o, "pickup")
+				_refresh_objective())
 	_refresh_objective()
 
 
@@ -2896,6 +2897,8 @@ func _refresh_objective() -> void:
 	for o in orders:
 		if o.get("status", "") == "shelf" and customers.has(int(o["id"])):
 			objective_rows.add_child(_row(T("Entrega o pedido #%d a %s") % [int(o["number"]), o["customer"]], "active"))
+		elif o.get("status", "") == "shelf":
+			objective_rows.add_child(_row(T("À espera que %s venha buscar o pedido #%d") % [o["customer"], int(o["number"])], "todo"))
 	if not cash_items.is_empty():
 		objective_rows.add_child(_row(T("Guarda o dinheiro do balcão na caixa registadora"), "active"))
 	if not parcels.is_empty():
@@ -2903,12 +2906,16 @@ func _refresh_objective() -> void:
 	for id in jobs.keys():
 		if jobs[id]["done"]:
 			objective_rows.add_child(_row(T("Pega no %s reparado e leva-o à prateleira") % _dev_name(id).to_lower(), "active"))
+	var chores := objective_rows.get_child_count() > 3
 	if not jobs.has(focus_job) or jobs[focus_job]["done"]:
 		focus_job = ""
 		for id in jobs.keys():
 			if not jobs[id]["done"]:
 				focus_job = id
 				break
+	if focus_job == "" and chores:
+		objective_title.text = T("Objetivo Atual")
+		return
 	if focus_job == "":
 		objective_title.text = T("Objetivo Atual")
 		var waiting := 0

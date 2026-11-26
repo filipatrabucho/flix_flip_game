@@ -259,6 +259,7 @@ const STRINGS := {
 	"mão livre (Q)": "free hand (Q)",
 	"segunda-feira, 1 de março": "Monday, 1 March",
 	"Idioma / Language": "Language / Idioma",
+	"À espera que %s venha buscar o pedido #%d": "Waiting for %s to pick up order #%d",
 	"Leva o pedido #%d à prateleira «Prontos a entregar» ou ao cliente": "Take order #%d to the \"Ready for pickup\" shelf or to the customer",
 	"Entrega o pedido #%d a %s": "Hand order #%d to %s",
 	"Guarda o dinheiro do balcão na caixa registadora": "Put the money on the counter into the register",
