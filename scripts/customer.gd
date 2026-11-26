@@ -38,6 +38,7 @@ var mood := "neutral"
 var _arrive_cb: Callable
 var height := 1.0
 var eyelids: Array = []
+var cap_color := Color(0, 0, 0, 0)
 var blink_t := 2.0
 
 
@@ -51,6 +52,7 @@ func setup(cust_name: String, seed_value: int, look := {}) -> void:
 	var shirt: Color = look.get("shirt", SHIRTS[rng.randi() % SHIRTS.size()])
 	var pants: Color = look.get("pants", PANTS[rng.randi() % PANTS.size()])
 	var hair_style: int = look.get("hair_style", rng.randi() % 4)
+	cap_color = look.get("cap", Color(0, 0, 0, 0))
 	var extras: Array = look.get("extras", [])
 	if rng.randf() < 0.25 and not look.has("extras"):
 		extras.append("glasses")
@@ -236,7 +238,7 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 			Kit.sphere(head, 0.045, hair, Vector3(0, 0.25, -0.07), Vector3(1, 0.9, 1))
 		_:   # cap
 			Kit.lathe(head, [Vector3(0.13, 0.091, 0.097), Vector3(0.17, 0.093, 0.1)], hair, Vector3.ZERO, Vector3.ZERO, 26, [-0.02, -0.02])
-			var cap := Kit.fabric(Color.from_hsv(rng.randf(), 0.6, 0.7), 0.8, 0.3, 30.0)
+			var cap := Kit.fabric(cap_color if cap_color.a > 0.0 else Color.from_hsv(rng.randf(), 0.6, 0.7), 0.8, 0.3, 30.0)
 			Kit.lathe(head, [Vector3(0.17, 0.095, 0.103), Vector3(0.22, 0.088, 0.096), Vector3(0.255, 0.06, 0.068), Vector3(0.275, 0.0, 0.0)], cap, Vector3.ZERO, Vector3.ZERO, 26, [-0.006, -0.006, -0.008, -0.008])
 			Kit.slab(head, Vector3(0.15, 0.008, 0.08), 0.035, 0.003, cap, cap, cap, Vector3(0, 0.178, 0.115), Vector3(-10, 0, 0))
 	if hair_style in [1, 2] and rng.randf() < 0.6:
@@ -260,6 +262,12 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	if "beard" in extras:
 		Kit.lathe(head, [Vector3(0.0, 0.04, 0.04), Vector3(0.03, 0.07, 0.075), Vector3(0.075, 0.085, 0.09), Vector3(0.1, 0.087, 0.088)], hair, Vector3.ZERO, Vector3.ZERO, 22, [0.022, 0.02, 0.014, 0.008])
 		mouth.position.z = 0.1
+	if "bag" in extras:
+		var leather := Kit.mat(Color("6b4423"), 0.6)
+		Kit.box(torso, Vector3(0.05, 0.62, 0.012), leather, Vector3(0.02, 0.33, 0.125), Vector3(0, 0, 32))
+		Kit.box(torso, Vector3(0.05, 0.62, 0.012), leather, Vector3(0.02, 0.33, -0.12), Vector3(0, 0, 32))
+		Kit.slab(torso, Vector3(0.09, 0.26, 0.2), 0.02, 0.01, leather, null, null, Vector3(0.2, 0.08, 0.0), Vector3(0, 0, 90))
+		Kit.box(torso, Vector3(0.05, 0.06, 0.003), Kit.mat(Color("f5b82e"), 0.4), Vector3(0.12, 0.38, 0.122))
 	if "apron" in extras:
 		Kit.lathe(torso, [Vector3(-0.15, 0.17, 0.125), Vector3(0.1, 0.165, 0.118), Vector3(0.3, 0.17, 0.125)], Kit.fabric(Color("5b8a3c"), 0.9), Vector3(0, 0, 0.004), Vector3.ZERO, 24)
 	# carried item holder (in front of the belly)

@@ -100,6 +100,8 @@ var counter_queue: Array = []
 var upgrades: Dictionary = {}          # upgrade id -> true
 var deliveries: Array = []             # parts in transit: {key, arrive}
 var parcels: Array = []                # parcels on the receiving shelf: {key, node, body, slot}
+var reserved_slots: Array = []         # receiving slots the postman is walking to
+var postman_keys: Array = []
 var carrying: Dictionary = {}          # {"order": o} while holding a repaired device
 var carry_node: Node3D
 var shelf_items: Array = [null, null, null, null]   # pickup shelf slots -> {order, node}
@@ -217,6 +219,8 @@ func _ready() -> void:
 	_reset_jobs()
 	_build_icons()
 	_build_shelf_targets()
+	var bell_body := Kit.static_body(self, Kit.sphere_shape(0.07), room.bell.global_position + Vector3(0, 0.03, 0), "bell")
+	bell_body.collision_layer = 1
 	_build_ui()
 	_apply_settings()
 	_show_menu()
@@ -657,6 +661,9 @@ func _walk_hover() -> void:
 		elif t.begins_with("tool:"):
 			pick = t
 			where = hit.collider.global_position + Vector3(0, 0.07, 0)
+		elif t == "bell":
+			pick = "bell"
+			where = hit.collider.global_position + Vector3(0, 0.08, 0)
 		elif t.begins_with("shelf:") or t == "cash" or t.begins_with("parcel"):
 			pick = t
 			where = hit.collider.global_position + Vector3(0, 0.12, 0)
@@ -694,6 +701,9 @@ func _walk_hover() -> void:
 			prompt.hide()
 			return
 		_show_prompt("E", text, where)
+		return
+	if pick == "bell":
+		_show_prompt("E", T("Tocar a campainha"), where)
 		return
 	if pick == "cash":
 		_show_prompt("E", T("Guardar %s na caixa") % _eur(float(hovered_cash.get("amount", 0.0))), where)
@@ -742,6 +752,11 @@ func _interact_walk() -> void:
 			_shelf_place(si)
 		elif carrying.is_empty() and shelf_items[si] != null:
 			_shelf_take(si)
+		return
+	if hovered_pick == "bell":
+		room.ring_bell()
+		if audio:
+			audio.play("bell", 0.8, 0.12)
 		return
 	if hovered_pick == "cash":
 		if not hovered_cash.is_empty() and cash_items.has(hovered_cash):
@@ -2288,6 +2303,8 @@ func _save_game() -> void:
 	var inv_save := inventory.duplicate()
 	for d in deliveries:
 		inv_save[d["key"]] = int(inv_save.get(d["key"], 0)) + 1
+	for k in postman_keys:
+		inv_save[k] = int(inv_save.get(k, 0)) + 1
 	for pc in parcels:
 		inv_save[pc["key"]] = int(inv_save.get(pc["key"], 0)) + 1
 	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money + pending_cash, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inv_save,
@@ -3335,11 +3352,36 @@ func _delivery_tick() -> void:
 			if slot < 0:
 				return
 			deliveries.erase(d)
-			_spawn_parcel(str(d["key"]), slot)
+			_send_postman(str(d["key"]), slot)
+
+
+## The postman walks in with the parcel, leaves it on the receiving shelf and goes.
+func _send_postman(key: String, slot: int) -> void:
+	reserved_slots.append(slot)
+	postman_keys.append(key)
+	var pm: Node3D = CustomerScene.new()
+	pm.setup(T("Carteiro"), 4242 + slot, {"skin": Color("e0b08c"), "hair": Color("3a2a1e"), "shirt": Color("2b4f8c"), "pants": Color("1f2a44"), "hair_style": 3, "cap": Color("1d3563"), "extras": ["bag"], "height": 1.0})
+	pm.pick.collision_layer = 0
+	add_child(pm)
+	pm.global_position = DOOR_OUT
+	pm.hold(room.make_parcel(""))
+	room.open_door()
+	_sfx("door_chime", 0.6)
+	_toast(T("O carteiro chegou com uma encomenda!"), false, YELLOW)
+	var stop := Room.RECEIVE_POS + Vector3(-0.55, 0, 0)
+	pm.walk_path([DOOR_IN, Vector3(1.95, 0, 1.4), stop], func() -> void:
+		pm.rotation.y = PI * 0.5
+		pm.hold(null)
+		reserved_slots.erase(slot)
+		postman_keys.erase(key)
+		_spawn_parcel(key, slot)
+		get_tree().create_timer(0.8).timeout.connect(func() -> void:
+			pm.walk_path([Vector3(1.95, 0, 1.4), DOOR_IN, DOOR_OUT], func() -> void: pm.queue_free())
+			get_tree().create_timer(2.2).timeout.connect(room.open_door)))
 
 
 func _free_receive_slot() -> int:
-	var used: Array = []
+	var used: Array = reserved_slots.duplicate()
 	for pc in parcels:
 		used.append(pc["slot"])
 	for i in range(room.receive_slots.size()):
@@ -3361,7 +3403,7 @@ func _spawn_parcel(key: String, slot: int) -> void:
 	body.set_meta("parcel", item)
 	parcels.append(item)
 	_sfx("door_chime", 0.5)
-	_toast(T("Chegou uma encomenda à receção (junto à porta)!"), false, YELLOW)
+	_toast(T("Encomenda entregue na receção (junto à porta)!"), false, YELLOW)
 	_refresh_objective()
 
 
@@ -3387,6 +3429,8 @@ func _clear_world_items() -> void:
 			pc["node"].queue_free()
 	parcels.clear()
 	deliveries.clear()
+	postman_keys.clear()
+	reserved_slots.clear()
 	for c in cash_items:
 		if is_instance_valid(c["node"]):
 			c["node"].queue_free()
