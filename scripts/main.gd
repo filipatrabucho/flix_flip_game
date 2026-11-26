@@ -1930,6 +1930,23 @@ func _device_standin(device: String) -> Node3D:
 			for sx in [-1.0, 1.0]:
 				Kit.capsule(n, 0.021, 0.085, Kit.plastic(Color("2a2e35"), 0.42), Vector3(sx * 0.048, -0.004, 0.034), Vector3(62, 0, sx * -14.0))
 			n.rotation_degrees = Vector3(-40, 0, 0)
+		"console", "handheld", "rotary", "radio":
+			var real: Node3D
+			match device:
+				"console":
+					real = ConsoleDev.new()
+				"handheld":
+					real = HandheldDev.new()
+				"rotary":
+					real = RotaryDev.new()
+				_:
+					real = RadioDev.new()
+			if real.surface_body:
+				real.surface_body.collision_layer = 0
+			real.set_process(false)
+			n.add_child(real)
+			if device == "handheld":
+				n.rotation_degrees = Vector3(-50, 0, 0)
 	return n
 
 
