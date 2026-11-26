@@ -662,34 +662,72 @@ func _counter() -> void:
 		logo.font = f
 	logo.position = Vector3(cx, 0.62, z + 0.285)
 	root.add_child(logo)
-	# cash register on the right, screen + keypad facing the workshop side (player)
+	# point-of-sale: cash drawer + tilted touchscreen + customer display + receipt printer
 	register = Node3D.new()
 	register.name = "Register"
-	register.position = Vector3(x0 + 0.32, COUNTER_TOP, z - 0.06)
+	register.position = Vector3(x0 + 0.34, COUNTER_TOP, z - 0.04)
 	register.rotation_degrees.y = 180.0
 	root.add_child(register)
-	var reg := Kit.plastic(Color("2b2f36"), 0.4)
-	Kit.slab(register, Vector3(0.34, 0.09, 0.3), 0.02, 0.01, reg, null, null, Vector3(0, 0.045, 0))
+	var steel := Kit.mat(Color("2c3036"), 0.35, 0.6)
+	var dark := Kit.plastic(Color("17191c"), 0.35, 0.1)
+	# cash drawer (metal box) with front, handle-less push front and key lock
+	Kit.slab(register, Vector3(0.42, 0.105, 0.42), 0.012, 0.006, steel, steel, steel, Vector3(0, 0.0525, 0))
 	register_drawer = Node3D.new()
-	register_drawer.position = Vector3(0, 0.03, 0.15)
+	register_drawer.position = Vector3(0, 0.05, 0.2)
 	register.add_child(register_drawer)
-	Kit.slab(register_drawer, Vector3(0.3, 0.05, 0.02), 0.006, 0.004, Kit.plastic(Color("3a3f46"), 0.4), null, null, Vector3.ZERO, Vector3(90, 0, 0))
-	Kit.box(register_drawer, Vector3(0.08, 0.008, 0.01), Kit.chrome(), Vector3(0, 0.0, 0.012))
-	Kit.slab(register, Vector3(0.24, 0.02, 0.14), 0.01, 0.005, Kit.plastic(Color("d9dde2"), 0.4), null, null, Vector3(0, 0.1, 0.05), Vector3(-15, 0, 0))
-	for r in range(3):
-		for c in range(4):
-			Kit.box(register, Vector3(0.035, 0.008, 0.025), Kit.plastic(Color("f4f6f8") if c < 3 else Color("e1b12c"), 0.4), Vector3(-0.075 + c * 0.05, 0.113 - r * 0.009, 0.025 + r * 0.035)).rotation_degrees.x = -15
-	Kit.slab(register, Vector3(0.22, 0.14, 0.015), 0.008, 0.005, reg, null, null, Vector3(0, 0.2, -0.08), Vector3(-12, 0, 0)).name = "RegisterScreen"
+	Kit.slab(register_drawer, Vector3(0.38, 0.012, 0.08), 0.008, 0.004, Kit.mat(Color("3a3f46"), 0.3, 0.7), null, null, Vector3(0, 0.0, 0.006), Vector3(90, 0, 0))
+	Kit.cyl(register_drawer, 0.008, 0.006, Kit.chrome(), Vector3(0.15, 0.0, 0.014), Vector3(90, 0, 0))
+	Kit.box(register_drawer, Vector3(0.002, 0.008, 0.002), Kit.mat(Color("111111"), 0.4), Vector3(0.15, 0.0, 0.0175))
+	# drawer interior: note slots + coin cups (visible when it slides open)
+	for i in range(4):
+		Kit.box(register_drawer, Vector3(0.08, 0.04, 0.16), Kit.mat(Color("1d2024"), 0.6), Vector3(-0.135 + i * 0.09, 0.0, -0.09))
+		Kit.box(register_drawer, Vector3(0.075, 0.03, 0.12), Kit.fabric([Color("7fb77e"), Color("e9b96e"), Color("8fb3d9"), Color("d98e8e")][i], 0.9), Vector3(-0.135 + i * 0.09, 0.012, -0.09))
+	# touchscreen on a stand, facing the player
+	Kit.cyl(register, 0.04, 0.012, dark, Vector3(0, 0.111, -0.08))
+	Kit.cyl(register, 0.014, 0.12, steel, Vector3(0, 0.17, -0.08))
+	var scr_pivot := Node3D.new()
+	scr_pivot.position = Vector3(0, 0.25, -0.07)
+	scr_pivot.rotation_degrees.x = -22.0
+	register.add_child(scr_pivot)
+	Kit.slab(scr_pivot, Vector3(0.3, 0.012, 0.2), 0.012, 0.004, Kit.black_glass(), dark, dark, Vector3.ZERO, Vector3(90, 0, 0))
+	Kit.box(scr_pivot, Vector3(0.27, 0.17, 0.001), Kit.emissive(Color("0f2a1b"), 0.6, true), Vector3(0, 0, 0.0065))
 	register_screen = Label3D.new()
 	register_screen.text = "€ 0,00"
 	register_screen.font_size = 64
 	register_screen.pixel_size = 0.0009
 	register_screen.modulate = Color("7dffa0")
 	register_screen.shaded = false
-	register_screen.position = Vector3(0, 0.2, -0.0705)
-	register_screen.rotation_degrees.x = -12
-	register.add_child(register_screen)
-	Kit.box(register, Vector3(0.19, 0.11, 0.002), Kit.mat(Color("0c1f14"), 0.2), Vector3(0, 0.2, -0.0718)).rotation_degrees.x = -12
+	register_screen.position = Vector3(0, 0.025, 0.0075)
+	scr_pivot.add_child(register_screen)
+	var shop_lbl := Label3D.new()
+	shop_lbl.text = "FIX & FLIP  POS"
+	shop_lbl.font_size = 22
+	shop_lbl.pixel_size = 0.0008
+	shop_lbl.modulate = Color("9fe8b8")
+	shop_lbl.shaded = false
+	shop_lbl.position = Vector3(0, 0.07, 0.0075)
+	scr_pivot.add_child(shop_lbl)
+	for i in range(3):
+		Kit.box(scr_pivot, Vector3(0.07, 0.03, 0.001), Kit.emissive([Color("2ecc71"), Color("f5b82e"), Color("e74c3c")][i], 0.8, true), Vector3(-0.08 + i * 0.08, -0.05, 0.0075))
+	# customer-facing display on a pole (faces the customer side)
+	Kit.cyl(register, 0.009, 0.16, steel, Vector3(0.17, 0.18, -0.17))
+	var cd := Kit.slab(register, Vector3(0.12, 0.02, 0.05), 0.008, 0.004, dark, null, null, Vector3(0.17, 0.27, -0.17), Vector3(-90, 0, 0))
+	cd.rotation_degrees = Vector3(-90, 0, 0)
+	var cust_lbl := Label3D.new()
+	cust_lbl.text = "OBRIGADO!"
+	cust_lbl.font_size = 26
+	cust_lbl.pixel_size = 0.0008
+	cust_lbl.modulate = Color("6ec6ff")
+	cust_lbl.shaded = false
+	cust_lbl.position = Vector3(0.17, 0.27, -0.181)
+	cust_lbl.rotation_degrees = Vector3(0, 180, 0)
+	register.add_child(cust_lbl)
+	# receipt printer with a paper roll sticking out
+	var pr := Kit.plastic(Color("e9ecef"), 0.4)
+	Kit.slab(register, Vector3(0.12, 0.11, 0.16), 0.02, 0.01, pr, null, null, Vector3(-0.27, 0.055, 0.0))
+	Kit.box(register, Vector3(0.08, 0.004, 0.03), Kit.plastic(Color("2b2f36"), 0.4), Vector3(-0.27, 0.112, 0.04))
+	var paper := Kit.box(register, Vector3(0.06, 0.07, 0.001), Kit.mat(Color("fbfaf6"), 0.8), Vector3(-0.27, 0.145, 0.045))
+	paper.rotation_degrees.x = -15.0
 	# card terminal + service bell + business cards + tablet
 	Kit.slab(root, Vector3(0.075, 0.03, 0.14), 0.012, 0.008, Kit.plastic(Color("1b1d21"), 0.4), null, null, Vector3(x0 + 0.68, COUNTER_TOP + 0.015, z + 0.14), Vector3(0, 15, 0))
 	Kit.box(root, Vector3(0.055, 0.003, 0.04), Kit.emissive(Color("6ec6ff"), 0.8, true), Vector3(x0 + 0.68, COUNTER_TOP + 0.031, z + 0.12)).rotation_degrees.y = 15
