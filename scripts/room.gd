@@ -1148,3 +1148,218 @@ func _back_room() -> void:
 	sign.position = Vector3(-ROOM_X + 0.01, 2.3, -0.75)
 	sign.rotation_degrees = Vector3(0, 90, 0)
 	root.add_child(sign)
+
+
+# -----------------------------------------------------------------------------
+# Decorations (bought in the shop, placed freely by the player)
+# -----------------------------------------------------------------------------
+const DECOR := {
+	"poster_fixit": {"name": "Poster «Fix It!»", "price": 15, "place": "wall"},
+	"poster_arcade": {"name": "Poster Arcade", "price": 15, "place": "wall"},
+	"poster_circuit": {"name": "Poster Circuito", "price": 15, "place": "wall"},
+	"poster_radio": {"name": "Poster Rádio Clube", "price": 15, "place": "wall"},
+	"poster_solder": {"name": "Poster «Keep Calm & Solder On»", "price": 15, "place": "wall"},
+	"neon_cat": {"name": "Néon de gato", "price": 45, "place": "wall"},
+	"clock": {"name": "Relógio de parede", "price": 25, "place": "wall"},
+	"string_lights": {"name": "Luzes de cordel", "price": 30, "place": "wall"},
+	"plant_big": {"name": "Planta grande (costela-de-adão)", "price": 35, "place": "floor"},
+	"rug": {"name": "Tapete às riscas", "price": 30, "place": "floor"},
+	"lava_lamp": {"name": "Candeeiro de lava", "price": 28, "place": "surface"},
+	"robot": {"name": "Robô de brincar", "price": 20, "place": "surface"},
+	"cactus": {"name": "Cato em vaso", "price": 12, "place": "surface"},
+}
+
+
+func make_decor(id: String) -> Node3D:
+	var n := Node3D.new()
+	n.name = "Decor_" + id
+	if id.begins_with("poster_"):
+		_poster(n, id)
+		return n
+	match id:
+		"neon_cat":
+			Kit.slab(n, Vector3(0.5, 0.012, 0.32), 0.03, 0.004, Kit.mat(Color("15161a"), 0.5), null, null, Vector3(0, 0.0, 0.006), Vector3(90, 0, 0))
+			var l := Label3D.new()
+			l.text = "=^.^="
+			l.font_size = 96
+			l.pixel_size = 0.0014
+			l.modulate = Color(2.4, 0.6, 1.8)
+			l.outline_modulate = Color(1.0, 0.2, 0.8, 0.8)
+			l.outline_size = 14
+			l.shaded = false
+			l.position = Vector3(0, 0, 0.016)
+			n.add_child(l)
+			var o := OmniLight3D.new()
+			o.light_color = Color("ff59c7")
+			o.light_energy = 0.8
+			o.omni_range = 1.4
+			o.position = Vector3(0, 0, 0.3)
+			n.add_child(o)
+		"clock":
+			Kit.cyl(n, 0.16, 0.03, Kit.plastic(Color("2b2f36"), 0.4), Vector3(0, 0, 0.015), Vector3(90, 0, 0))
+			Kit.cyl(n, 0.145, 0.004, Kit.mat(Color("f6f3ec"), 0.6), Vector3(0, 0, 0.031), Vector3(90, 0, 0))
+			for i in range(12):
+				var a := TAU * i / 12.0
+				Kit.box(n, Vector3(0.006, 0.02 if i % 3 == 0 else 0.012, 0.002), Kit.mat(Color("1b1b1b"), 0.5), Vector3(sin(a) * 0.125, cos(a) * 0.125, 0.034), Vector3(0, 0, -rad_to_deg(a)))
+			var hh := Node3D.new()
+			hh.name = "HourHand"
+			hh.position = Vector3(0, 0, 0.036)
+			n.add_child(hh)
+			Kit.box(hh, Vector3(0.008, 0.07, 0.002), Kit.mat(Color("1b1b1b"), 0.5), Vector3(0, 0.03, 0))
+			var mh := Node3D.new()
+			mh.name = "MinuteHand"
+			mh.position = Vector3(0, 0, 0.039)
+			n.add_child(mh)
+			Kit.box(mh, Vector3(0.005, 0.11, 0.002), Kit.mat(Color("c0392b"), 0.5), Vector3(0, 0.05, 0))
+		"string_lights":
+			var pts := Kit.bezier(Vector3(-0.6, 0.1, 0.02), Vector3(-0.3, -0.15, 0.02), Vector3(0.3, -0.15, 0.02), Vector3(0.6, 0.1, 0.02), 24)
+			Kit.mi(n, Kit.tube_mesh(pts, 0.002, 5), Kit.mat(Color("1b1b1b"), 0.5))
+			var cols := [Color("ffcf6b"), Color("ff7b7b"), Color("7bd3ff"), Color("9bff8a")]
+			for i in range(1, pts.size() - 1, 2):
+				Kit.sphere(n, 0.014, Kit.emissive(cols[i % 4], 3.0, true), pts[i] + Vector3(0, -0.015, 0))
+			var o2 := OmniLight3D.new()
+			o2.light_color = Color("ffd59a")
+			o2.light_energy = 0.6
+			o2.omni_range = 1.6
+			o2.position = Vector3(0, -0.1, 0.3)
+			n.add_child(o2)
+		"plant_big":
+			Kit.cyl(n, 0.2, 0.42, Kit.mat(Color("d8cfc0"), 0.6), Vector3(0, 0.21, 0), Vector3.ZERO, 0.16)
+			var lm := Kit.mat(Color("2f7a35"), 0.5)
+			lm.cull_mode = BaseMaterial3D.CULL_DISABLED
+			for i in range(10):
+				var a := TAU * i / 10.0 + randf() * 0.4
+				var top := Vector3(cos(a) * 0.3, 0.8 + randf() * 0.5, sin(a) * 0.3)
+				Kit.mi(n, Kit.tube_mesh(Kit.bezier(Vector3(0, 0.4, 0), Vector3(cos(a) * 0.05, 0.6, sin(a) * 0.05), top * 0.8, top, 8), 0.006, 6), Kit.mat(Color("4a6b2f"), 0.7))
+				var leaf := Kit.mi(n, Kit.leaf_mesh(0.34, 0.26, 0.15), lm, top)
+				leaf.look_at_from_position(top, top + Vector3(cos(a), -0.3, sin(a)), Vector3.UP)
+		"rug":
+			var rug := Kit.slab(n, Vector3(1.4, 0.01, 0.9), 0.04, 0.004, Kit.fabric(Color("e9d8b4"), 0.95, 0.5, 20.0), null, null, Vector3(0, 0.005, 0))
+			rug.name = "Rug"
+			for i in range(5):
+				Kit.box(n, Vector3(1.36, 0.002, 0.07), Kit.fabric([Color("c0392b"), Color("2c3e50"), Color("16a085"), Color("c0392b"), Color("2c3e50")][i], 0.95), Vector3(0, 0.011, -0.32 + i * 0.16))
+		"lava_lamp":
+			Kit.cyl(n, 0.05, 0.08, Kit.chrome(Color("8f96a0")), Vector3(0, 0.04, 0), Vector3.ZERO, 0.035)
+			var glass := Kit.glass(Color(0.4, 0.1, 0.6), 0.05, 0.55)
+			Kit.lathe(n, [Vector3(0.08, 0.035, 0.035), Vector3(0.18, 0.045, 0.045), Vector3(0.26, 0.03, 0.03), Vector3(0.27, 0.0, 0.0)], glass, Vector3.ZERO, Vector3.ZERO, 20)
+			for i in range(4):
+				Kit.sphere(n, 0.015 + i * 0.003, Kit.emissive(Color("ff7b3c"), 3.0, true), Vector3(randf_range(-0.01, 0.01), 0.11 + i * 0.035, randf_range(-0.01, 0.01)), Vector3(1, 1.3, 1))
+			Kit.cyl(n, 0.03, 0.03, Kit.chrome(Color("8f96a0")), Vector3(0, 0.285, 0), Vector3.ZERO, 0.02)
+			var o3 := OmniLight3D.new()
+			o3.light_color = Color("ff8a4c")
+			o3.light_energy = 0.5
+			o3.omni_range = 0.8
+			o3.position = Vector3(0, 0.18, 0)
+			n.add_child(o3)
+		"robot":
+			var m := Kit.mat(Color("b8c2cc"), 0.35, 0.7)
+			Kit.slab(n, Vector3(0.08, 0.09, 0.06), 0.01, 0.008, m, null, null, Vector3(0, 0.1, 0))
+			Kit.slab(n, Vector3(0.065, 0.055, 0.055), 0.01, 0.008, m, null, null, Vector3(0, 0.18, 0))
+			for sx in [-1.0, 1.0]:
+				Kit.sphere(n, 0.009, Kit.emissive(Color("6ec6ff"), 3.0, true), Vector3(sx * 0.015, 0.185, 0.028))
+				Kit.cyl(n, 0.012, 0.055, m, Vector3(sx * 0.022, 0.028, 0))
+				Kit.cyl(n, 0.01, 0.06, m, Vector3(sx * 0.052, 0.1, 0), Vector3(0, 0, sx * 15.0))
+			Kit.cyl(n, 0.002, 0.03, m, Vector3(0, 0.22, 0))
+			Kit.sphere(n, 0.007, Kit.emissive(Color("ff4d4d"), 3.0, true), Vector3(0, 0.237, 0))
+		"cactus":
+			Kit.cyl(n, 0.05, 0.07, Kit.mat(Color("c0703f"), 0.7), Vector3(0, 0.035, 0), Vector3.ZERO, 0.04)
+			var cm := Kit.mat(Color("3f8f4a"), 0.6)
+			Kit.capsule(n, 0.03, 0.14, cm, Vector3(0, 0.13, 0))
+			Kit.capsule(n, 0.016, 0.06, cm, Vector3(0.035, 0.14, 0), Vector3(0, 0, -50))
+			Kit.sphere(n, 0.012, Kit.mat(Color("ff6fa8"), 0.5), Vector3(0, 0.205, 0))
+	return n
+
+
+func _poster(n: Node3D, id: String) -> void:
+	var vp := Kit.text_viewport(n, Vector2i(300, 400), func(rt: Control) -> void:
+		var bg := ColorRect.new()
+		bg.size = Vector2(300, 400)
+		rt.add_child(bg)
+		var title := Label.new()
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.size = Vector2(300, 120)
+		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var f := load("res://assets/fonts/Nunito-ExtraBold.ttf")
+		if f:
+			title.add_theme_font_override("font", f)
+		rt.add_child(title)
+		var sub := Label.new()
+		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sub.size = Vector2(300, 40)
+		sub.position = Vector2(0, 340)
+		sub.add_theme_font_size_override("font_size", 18)
+		rt.add_child(sub)
+		match id:
+			"poster_fixit":
+				bg.color = Color("f4a261")
+				title.text = "FIX IT!"
+				title.position = Vector2(0, 40)
+				title.add_theme_font_size_override("font_size", 72)
+				title.add_theme_color_override("font_color", Color("264653"))
+				var c := ColorRect.new()
+				c.color = Color("2a9d8f")
+				c.position = Vector2(60, 170)
+				c.size = Vector2(180, 150)
+				rt.add_child(c)
+				sub.text = "Não deites fora. Arranja!"
+				sub.add_theme_color_override("font_color", Color("264653"))
+			"poster_arcade":
+				bg.color = Color("1a0b2e")
+				for i in range(8):
+					var ln := ColorRect.new()
+					ln.color = Color("ff2fd1")
+					ln.position = Vector2(0, 220 + i * 22)
+					ln.size = Vector2(300, 2)
+					rt.add_child(ln)
+				title.text = "INSERT\nCOIN"
+				title.position = Vector2(0, 50)
+				title.add_theme_font_size_override("font_size", 54)
+				title.add_theme_color_override("font_color", Color("44f1ff"))
+				sub.text = "1UP  •  HI-SCORE 99999"
+				sub.add_theme_color_override("font_color", Color("ffe14d"))
+			"poster_circuit":
+				bg.color = Color("0d3b2e")
+				for i in range(14):
+					var ln2 := ColorRect.new()
+					ln2.color = Color("c9a640")
+					ln2.position = Vector2(randf_range(10, 280), randf_range(130, 330))
+					ln2.size = Vector2(randf_range(30, 120), 3) if i % 2 == 0 else Vector2(3, randf_range(30, 100))
+					rt.add_child(ln2)
+				title.text = "CIRCUITOS"
+				title.position = Vector2(0, 40)
+				title.add_theme_font_size_override("font_size", 44)
+				title.add_theme_color_override("font_color", Color("9bffc8"))
+				sub.text = "Tudo está ligado."
+				sub.add_theme_color_override("font_color", Color("9bffc8"))
+			"poster_radio":
+				bg.color = Color("f1e3c6")
+				title.text = "RÁDIO\nCLUBE"
+				title.position = Vector2(0, 40)
+				title.add_theme_font_size_override("font_size", 56)
+				title.add_theme_color_override("font_color", Color("8b2e1f"))
+				var r := ColorRect.new()
+				r.color = Color("8b5a2b")
+				r.position = Vector2(80, 200)
+				r.size = Vector2(140, 110)
+				rt.add_child(r)
+				sub.text = "Ondas médias • 1958"
+				sub.add_theme_color_override("font_color", Color("8b2e1f"))
+			_:
+				bg.color = Color("c1121f")
+				title.text = "KEEP CALM\n&\nSOLDER ON"
+				title.position = Vector2(0, 80)
+				title.size = Vector2(300, 240)
+				title.add_theme_font_size_override("font_size", 46)
+				title.add_theme_color_override("font_color", Color("fdf0d5"))
+				sub.text = "♛"
+				sub.add_theme_color_override("font_color", Color("fdf0d5"))
+	, false)
+	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	var frame := Kit.mat(Color("1b1b1b"), 0.5)
+	Kit.box(n, Vector3(0.48, 0.63, 0.015), frame, Vector3(0, 0, 0.0075))
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = vp.get_texture()
+	m.roughness = 0.6
+	var q := QuadMesh.new()
+	q.size = Vector2(0.44, 0.59)
+	Kit.mi(n, q, m, Vector3(0, 0, 0.0155))

@@ -190,6 +190,9 @@ var energy_bar: ProgressBar
 var hunger_bar: ProgressBar
 var tired_warned := false
 var coffee_body: StaticBody3D
+var decor_items: Array = []            # {id, node, body}
+var moving: Dictionary = {}            # object being rearranged
+var hovered_movable: Dictionary = {}
 var fade: ColorRect
 var meter_panel: PanelContainer
 var board_root: Control
@@ -225,6 +228,7 @@ func _ready() -> void:
 	_reset_jobs()
 	_build_icons()
 	_build_shelf_targets()
+	_build_place_colliders()
 	var bell_body := Kit.static_body(self, Kit.sphere_shape(0.07), room.bell.global_position + Vector3(0, 0.03, 0), "bell")
 	bell_body.collision_layer = 1
 	for si in range(room.stools.size()):
@@ -512,6 +516,9 @@ func _process(delta: float) -> void:
 	for c in customers.values():
 		if is_instance_valid(c):
 			c.look_target = cam.global_position
+	if mode == "move":
+		_walk_move(delta)
+		_update_move()
 	match mode:
 		"walk":
 			_walk_move(delta)
@@ -525,6 +532,11 @@ func _process(delta: float) -> void:
 			pass
 	if hud and hud.visible:
 		_update_hud_values()
+	for de in decor_items:
+		if de["id"] == "clock" and is_instance_valid(de["node"]):
+			var mm := int(minutes) % 720
+			(de["node"].get_node("HourHand") as Node3D).rotation.z = -TAU * mm / 720.0
+			(de["node"].get_node("MinuteHand") as Node3D).rotation.z = -TAU * (mm % 60) / 60.0
 	if reticle and reticle.visible:
 		reticle.queue_redraw()
 
@@ -532,6 +544,18 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		_handle_key(event as InputEventKey)
+	if mode == "move":
+		if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			var sens3: float = 0.0024 * float(settings["sensitivity"])
+			walk_yaw -= event.relative.x * sens3
+			walk_pitch = clampf(walk_pitch - event.relative.y * sens3, -1.35, 1.2)
+			cam.rotation = Vector3(walk_pitch, walk_yaw, 0)
+		elif event is InputEventMouseButton and event.pressed:
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				_end_move(true)
+			elif event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				_rotate_moving(1.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0)
+		return
 	if mode == "sit" and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var sens2: float = 0.0024 * float(settings["sensitivity"])
 		walk_yaw -= event.relative.x * sens2
@@ -583,6 +607,14 @@ func _handle_key(e: InputEventKey) -> void:
 		if k == KEY_E or k == KEY_ENTER or k == KEY_SPACE or k == KEY_KP_ENTER:
 			_dialog_advance()
 		return
+	if mode == "move":
+		if k == KEY_ESCAPE:
+			_end_move(false)
+		elif k == KEY_R:
+			_rotate_moving()
+		elif k == KEY_G or k == KEY_E or k == KEY_ENTER:
+			_end_move(true)
+		return
 	if mode == "sit":
 		if k == KEY_ESCAPE:
 			_pause()
@@ -625,6 +657,8 @@ func _handle_key(e: InputEventKey) -> void:
 		_equip("none")
 	elif k == KEY_E and mode == "walk":
 		_interact_walk()
+	elif k == KEY_G and mode == "walk" and not hovered_movable.is_empty():
+		_start_move(hovered_movable)
 	elif k == KEY_R and mode == "inspect":
 		orbit = Vector2.ZERO
 		zoom = 1.0
@@ -717,6 +751,23 @@ func _walk_hover() -> void:
 			if is_instance_valid(cn) and not cn.walking:
 				pick = "cust:%d" % cn.order_id
 				where = cn.global_position + Vector3(0, 1.85 * cn.height, 0)
+	hovered_movable = {}
+	if not hit.is_empty() and hit.collider.has_meta("target"):
+		var mt := str(hit.collider.get_meta("target"))
+		if mt.begins_with("tool:"):
+			var tid2 := mt.substr(5)
+			if tool != tid2:
+				hovered_movable = {"node": bench_tools[tid2], "kind": "tool", "id": tid2, "pick": hit.collider, "place": "surface"}
+		elif mt == "device" and devices.has(str(hit.collider.get_meta("device", ""))):
+			var did := str(hit.collider.get_meta("device"))
+			hovered_movable = {"node": devices[did], "kind": "device", "id": did, "pick": hit.collider, "place": "surface"}
+		elif mt.begins_with("decor:"):
+			var di := int(mt.substr(6))
+			if di < decor_items.size():
+				var de: Dictionary = decor_items[di]
+				hovered_movable = {"node": de["node"], "kind": "decor", "id": de["id"], "pick": hit.collider, "place": Room.DECOR[de["id"]]["place"]}
+				pick = mt
+				where = hit.collider.global_position + Vector3(0, 0.25, 0)
 	if pick != hovered_pick:
 		if hovered_pick.begins_with("device:"):
 			var old_id := hovered_pick.substr(7)
@@ -765,6 +816,10 @@ func _walk_hover() -> void:
 	if pick.begins_with("parcel"):
 		_show_prompt("E", T("Abrir encomenda: %s") % T(Data.PARTS[hovered_parcel.get("key", "battery")]["name"]), where)
 		return
+	if pick.begins_with("decor:"):
+		_show_prompt("G", T(Room.DECOR[hovered_movable.get("id", "rug")]["name"]), where)
+		prompt_label.text = T("Mover %s") % T(Room.DECOR[hovered_movable.get("id", "rug")]["name"])
+		return
 	if pick.begins_with("cust:"):
 		var cc: Node3D = customers.get(int(pick.substr(5)))
 		if cc == null:
@@ -782,6 +837,8 @@ func _walk_hover() -> void:
 
 
 func _show_prompt(key: String, text: String, world_pos: Vector3) -> void:
+	if not hovered_movable.is_empty() and mode == "walk":
+		text += "    [G] " + T("Mover")
 	prompt_label.text = text
 	var kc: Label = prompt.get_meta("key")
 	kc.text = key
@@ -1759,6 +1816,25 @@ func _end_carry() -> void:
 	carry_node = null
 
 
+## Invisible colliders used when placing objects: floor (layer 8) and walls (layer 4).
+func _build_place_colliders() -> void:
+	var floor_b := Kit.static_body(self, Kit.box_shape(Vector3(7.4, 0.1, 4.6)), Vector3(-1.0, -0.05, 0.4))
+	floor_b.collision_layer = 8
+	var walls := [
+		[Vector3(5.2, 2.8, 0.1), Vector3(0, 1.4, -1.8)],
+		[Vector3(5.2, 2.8, 0.1), Vector3(0, 1.4, 2.65)],
+		[Vector3(0.1, 2.8, 4.4), Vector3(2.65, 1.4, 0.45)],
+		[Vector3(0.1, 2.8, 3.0), Vector3(-2.65, 1.4, 1.1)],
+		[Vector3(0.1, 2.8, 0.6), Vector3(-2.65, 1.4, -1.45)],
+		[Vector3(1.95, 2.8, 0.1), Vector3(-3.67, 1.4, -1.8)],
+		[Vector3(1.95, 2.8, 0.1), Vector3(-3.67, 1.4, 0.65)],
+		[Vector3(0.1, 2.8, 2.4), Vector3(-4.7, 1.4, -0.57)],
+	]
+	for w in walls:
+		var b := Kit.static_body(self, Kit.box_shape(w[0]), w[1])
+		b.collision_layer = 4
+
+
 func _build_shelf_targets() -> void:
 	for b in shelf_bodies:
 		if is_instance_valid(b):
@@ -2373,7 +2449,7 @@ func _save_game() -> void:
 	for pc in parcels:
 		inv_save[pc["key"]] = int(inv_save.get(pc["key"], 0)) + 1
 	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money + pending_cash, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inv_save,
-		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount, "upgrades": upgrades, "stamina": stamina, "hunger": hunger}))
+		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount, "upgrades": upgrades, "stamina": stamina, "hunger": hunger, "decor": _decor_save(), "tools_pos": _tools_save()}))
 
 
 func _has_save() -> bool:
@@ -2424,6 +2500,21 @@ func _load_game() -> bool:
 	story_flags = data.get("story_flags", {})
 	rent_due_day = int(data.get("rent_due_day", 0))
 	rent_amount = int(data.get("rent_amount", Story.RENT))
+	_clear_decor()
+	for de in data.get("decor", []):
+		if de is Dictionary and Room.DECOR.has(str(de.get("id", ""))):
+			var a: Array = de.get("xf", [])
+			if a.size() == 12:
+				_spawn_decor(str(de["id"]), Transform3D(Basis(Vector3(a[0], a[1], a[2]), Vector3(a[3], a[4], a[5]), Vector3(a[6], a[7], a[8])), Vector3(a[9], a[10], a[11])))
+	var tp = data.get("tools_pos", {})
+	if tp is Dictionary:
+		for tid in tp.keys():
+			var a2: Array = tp[tid]
+			if bench_tools.has(tid) and a2.size() == 12:
+				var node: Node3D = bench_tools[tid]
+				node.global_transform = Transform3D(Basis(Vector3(a2[0], a2[1], a2[2]), Vector3(a2[3], a2[4], a2[5]), Vector3(a2[6], a2[7], a2[8])), Vector3(a2[9], a2[10], a2[11]))
+				var pk: Node3D = node.get_meta("pick")
+				pk.global_position = Vector3(a2[9], 0.95, a2[11])
 	stamina = float(data.get("stamina", 100.0))
 	hunger = float(data.get("hunger", 100.0))
 	upgrades = {}
@@ -3164,11 +3255,11 @@ func _build_board(base: Control) -> void:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 10)
 	v.add_child(tabs)
-	for t in [["orders", "Pedidos  (P)"], ["shop", "Loja de Peças  (L)"], ["upgrades", "Melhorias  (U)"]]:
+	for t in [["orders", "Pedidos  (P)"], ["shop", "Peças  (L)"], ["upgrades", "Melhorias  (U)"], ["decor", "Decoração"]]:
 		var b := Button.new()
 		b.text = T(t[1])
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(170, 40)
+		b.custom_minimum_size = Vector2(128, 40)
 		b.add_theme_font_override("font", font_xbold)
 		b.add_theme_font_size_override("font_size", 18)
 		var kind: String = t[0]
@@ -3255,6 +3346,8 @@ func _refresh_board() -> void:
 		_fill_orders()
 	elif board_kind == "upgrades":
 		_fill_upgrades()
+	elif board_kind == "decor":
+		_fill_decor()
 	else:
 		_fill_shop()
 
@@ -3421,6 +3514,116 @@ func _use_comfort(what: String) -> void:
 				_go_to_sleep()
 
 
+## --- rearranging objects ------------------------------------------------------
+func _start_move(info: Dictionary) -> void:
+	var node: Node3D = info["node"]
+	if info["kind"] == "device" and (active_device != "" or (jobs.has(info["id"]) and devices[info["id"]].busy)):
+		return
+	moving = info.duplicate()
+	moving["orig"] = node.global_transform
+	var excl: Array[RID] = []
+	for b in _bodies_in(node):
+		excl.append(b.get_rid())
+	if info.has("pick") and is_instance_valid(info["pick"]):
+		excl.append((info["pick"] as CollisionObject3D).get_rid())
+	moving["exclude"] = excl
+	if info["kind"] == "tool":
+		moving["yoff"] = node.global_position.y - 0.92
+	else:
+		moving["yoff"] = 0.0
+	mode = "move"
+	prompt.hide()
+	_set_hints([["mouse_l", T("Pousar")], ["R", T("Rodar")], ["Esc", T("Cancelar")]])
+	hints_bar.show()
+	_sfx("pickup", 0.6)
+
+
+func _bodies_in(n: Node) -> Array:
+	var out: Array = []
+	if n is CollisionObject3D:
+		out.append(n)
+	for c in n.get_children():
+		out.append_array(_bodies_in(c))
+	return out
+
+
+func _update_move() -> void:
+	if moving.is_empty():
+		return
+	var node: Node3D = moving["node"]
+	var center := get_viewport().get_visible_rect().size * 0.5
+	var from := cam.project_ray_origin(center)
+	var to := from + cam.project_ray_normal(center) * 3.0
+	var place: String = moving["place"]
+	var mask := 4 if place == "wall" else (8 if place == "floor" else 2)
+	var q := PhysicsRayQueryParameters3D.create(from, to, mask)
+	q.exclude = moving["exclude"]
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if hit.is_empty():
+		return
+	var pos: Vector3 = hit.position
+	if place == "wall":
+		var nrm: Vector3 = hit.normal
+		pos += nrm * 0.005
+		pos.y = clampf(pos.y, 0.6, 2.5)
+		node.global_transform = Transform3D(Basis.looking_at(-nrm, Vector3.UP), pos)
+	else:
+		if place == "surface" and hit.normal.y < 0.7:
+			return
+		node.global_position = pos + Vector3(0, float(moving["yoff"]), 0)
+
+
+func _rotate_moving(dir := 1.0) -> void:
+	if moving.is_empty() or moving["place"] == "wall":
+		return
+	(moving["node"] as Node3D).rotate_y(deg_to_rad(15.0) * dir)
+
+
+func _end_move(confirm: bool) -> void:
+	var node: Node3D = moving["node"]
+	if not confirm:
+		node.global_transform = moving["orig"]
+	if moving["kind"] == "tool" and moving.has("pick"):
+		(moving["pick"] as Node3D).global_position = node.global_position + Vector3(0, 0.03 - float(moving["yoff"]), 0)
+	moving = {}
+	mode = "walk"
+	hints_bar.hide()
+	if confirm:
+		_sfx("part", 0.5)
+		_save_game()
+
+
+func _spawn_decor(id: String, xf = null) -> Dictionary:
+	var n := room.make_decor(id)
+	add_child(n)
+	var i := decor_items.size()
+	var place: String = Room.DECOR[id]["place"]
+	var size := Vector3(0.5, 0.65, 0.06) if place == "wall" else (Vector3(1.0, 0.3, 0.8) if id == "rug" else Vector3(0.35, 0.5, 0.35))
+	var body := Kit.static_body(n, Kit.box_shape(size), Vector3(0, 0.0 if place == "wall" else size.y * 0.5, 0.03 if place == "wall" else 0.0), "decor:%d" % i)
+	body.collision_layer = 1
+	var item := {"id": id, "node": n, "body": body}
+	decor_items.append(item)
+	if xf != null:
+		n.global_transform = xf
+	return item
+
+
+func _buy_decor(id: String) -> void:
+	var price := float(Room.DECOR[id]["price"])
+	if money < price:
+		_toast(T("Dinheiro insuficiente."), true)
+		return
+	money -= price
+	day_profit -= price
+	var item := _spawn_decor(id)
+	var node: Node3D = item["node"]
+	node.global_position = cam.global_position + (-cam.global_transform.basis.z) * 1.2
+	_close_board()
+	_sfx("cash", 0.5)
+	_toast(T("Escolhe onde pôr: olha para o sítio e clica."), false, YELLOW)
+	_start_move({"node": node, "kind": "decor", "id": id, "pick": item["body"], "place": Room.DECOR[id]["place"]})
+
+
 var sit_return := Vector3.ZERO
 
 
@@ -3494,6 +3697,36 @@ func _buy_upgrade(key: String) -> void:
 	_toast(T("Melhoria instalada: %s") % T(Data.UPGRADES[key]["name"]), false, GREEN)
 	_save_game()
 	_refresh_board()
+
+
+func _fill_decor() -> void:
+	board_box.add_child(_label(T("Compra e escolhe onde pôr. Em jogo, olha para um objeto e carrega G para o mudar de sítio."), 15, MUTED))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	board_box.add_child(grid)
+	var where_txt := {"wall": T("Parede"), "floor": T("Chão"), "surface": T("Bancada / balcão")}
+	for key in Room.DECOR.keys():
+		var d: Dictionary = Room.DECOR[key]
+		var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(14, 10, 14, 10))
+		card.mouse_filter = Control.MOUSE_FILTER_PASS
+		card.custom_minimum_size = Vector2(355, 0)
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		card.add_child(h)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(_label(T(str(d["name"])), 16, TEXT, font_xbold))
+		info.add_child(_label("%s   •   %s" % [_eur(float(d["price"])), where_txt[d["place"]]], 13, MUTED))
+		h.add_child(info)
+		var buy := _small_button(T("Comprar"), true)
+		var k: String = key
+		buy.disabled = money < float(d["price"])
+		buy.pressed.connect(func() -> void: _buy_decor(k))
+		buy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(buy)
+		grid.add_child(card)
 
 
 func _fill_upgrades() -> void:
@@ -3616,6 +3849,41 @@ func _open_parcel(item: Dictionary) -> void:
 	_refresh_objective()
 	if mode == "inspect":
 		_activate_step_targets()
+
+
+func _xf_array(t: Transform3D) -> Array:
+	return [t.basis.x.x, t.basis.x.y, t.basis.x.z, t.basis.y.x, t.basis.y.y, t.basis.y.z, t.basis.z.x, t.basis.z.y, t.basis.z.z, t.origin.x, t.origin.y, t.origin.z]
+
+
+func _decor_save() -> Array:
+	var out: Array = []
+	for de in decor_items:
+		if is_instance_valid(de["node"]):
+			out.append({"id": de["id"], "xf": _xf_array((de["node"] as Node3D).global_transform)})
+	return out
+
+
+func _tools_save() -> Dictionary:
+	var out := {}
+	for tid in bench_tools.keys():
+		out[tid] = _xf_array((bench_tools[tid] as Node3D).global_transform)
+	return out
+
+
+## A few decorations already on the walls of grandpa's workshop.
+func _default_decor() -> void:
+	_spawn_decor("poster_fixit", Transform3D(Basis.looking_at(Vector3(1, 0, 0), Vector3.UP), Vector3(2.597, 1.65, -0.55)))
+	_spawn_decor("poster_radio", Transform3D(Basis.looking_at(Vector3(-1, 0, 0), Vector3.UP), Vector3(-2.597, 1.65, 2.05)))
+	_spawn_decor("clock", Transform3D(Basis.looking_at(Vector3(0, 0, -1), Vector3.UP), Vector3(-1.75, 2.1, 2.597) * Vector3(1, 1, 1)))
+	_spawn_decor("string_lights", Transform3D(Basis.looking_at(Vector3(0, 0, 1), Vector3.UP), Vector3(1.2, 2.45, -1.745)))
+	_spawn_decor("cactus", Transform3D(Basis.IDENTITY, Vector3(1.38, Room.COUNTER_TOP, Room.COUNTER_Z + 0.1)))
+
+
+func _clear_decor() -> void:
+	for de in decor_items:
+		if is_instance_valid(de["node"]):
+			de["node"].queue_free()
+	decor_items.clear()
 
 
 func _clear_world_items() -> void:
@@ -4195,12 +4463,14 @@ func _new_game() -> void:
 	upgrades = {}
 	stamina = 100.0
 	hunger = 100.0
+	_clear_decor()
 	room.clear_upgrades()
 	_apply_upgrades()
 	_reset_jobs()
 	_clear_customers()
 	_clear_world_items()
 	orders.clear()
+	_default_decor()
 	_save_game()
 	_start_game(true)
 
