@@ -37,8 +37,8 @@ func _build() -> void:
 	# rotary dial on the sloped front
 	dial = Node3D.new()
 	dial.name = "Dial"
-	dial.position = Vector3(0, 0.072, 0.072)
-	dial.rotation_degrees = Vector3(40, 0, 0)
+	dial.position = Vector3(0, 0.068, 0.094)
+	dial.rotation_degrees = Vector3(58, 0, 0)
 	body.add_child(dial)
 	Kit.cyl(dial, 0.048, 0.006, chrome, Vector3(0, 0.003, 0))
 	Kit.cyl(dial, 0.042, 0.004, Kit.plastic(Color("f2ede2"), 0.4), Vector3(0, 0.006, 0))
