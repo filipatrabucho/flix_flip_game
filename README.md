@@ -1,4 +1,4 @@
-# Fix & Flip Tech — v1.0
+# Fix & Flip Tech — v1.1
 
 Simulador de oficina de eletrónica em **Godot 4** (Forward+). Compra equipamentos avariados, repara-os passo a passo com as mãos (de luva) e ferramentas reais, e revende com lucro.
 
@@ -50,6 +50,16 @@ Depois do fim da história o jogo continua em modo livre.
 
 Os clientes entram pela porta da loja, fazem fila no balcão e esperam com um **!** por cima da cabeça. Olha para eles e carrega **E** para ouvires a queixa e aceitares ou recusares o trabalho. Quando a reparação acaba, o cliente volta ao balcão (**✓**) para levantar o equipamento e pagar.
 
+## Novidades v1.1
+
+- **Novos equipamentos**: consola de jogos, consola portátil, telefone antigo de disco e rádio de válvulas, cada um com 2 avarias (16 avarias no total).
+- **Fluxo de entrega realista**: depois de reparares, pegas no equipamento (E) e pousa-lo na prateleira **«Prontos a entregar»** (lugares #1 a #4). O cliente volta e pede «o pedido #N»: vais buscá-lo, entregas e o cliente deixa o **dinheiro no balcão**. Clica no dinheiro e ele vai para a **caixa registadora**.
+- **Loja de peças** com filtros por equipamento, imagem 3D de cada peça e **entrega demorada**: a encomenda chega passados uns minutos a uma caixa de cartão na prateleira **«Receção»**, junto à porta. Abre a caixa para pôr a peça no stock.
+- **Melhorias da oficina (U)**: chave de fendas elétrica, candeeiro LED, máquina de café, coluna de som, montra e néon. Cada uma aparece na oficina e tem um efeito permanente.
+- **Som e música**: 6 músicas lo-fi originais em playlist aleatória e efeitos para cada ação (parafusos, ar comprimido, porta, campainha, caixa registadora...). Os volumes ajustam-se nas Definições.
+- **Clientes calmos no início**: nos primeiros capítulos só há um trabalho de cada vez, e o cliente seguinte chega depois de entregares.
+- **Personagens mais realistas**: corpo com proporções humanas, joelhos e cotovelos, mãos com dedos, rosto com nariz, orelhas, íris colorida, pestanas e piscar de olhos, e roupa variada (camisa, hoodie, casaco).
+
 ## Idiomas
 
 Português e English: Definições → Idioma / Language.
@@ -62,6 +72,7 @@ Português e English: Definições → Idioma / Language.
 | E | Interagir (falar com clientes / reparar / pegar ferramenta) |
 | P | Pedidos dos clientes |
 | L | Loja de peças |
+| U | Melhorias da oficina |
 | 1–5 / roda do rato | Escolher ferramenta |
 | Q | Mão livre |
 | TAB | Roda de ferramentas |
