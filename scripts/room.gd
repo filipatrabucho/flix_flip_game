@@ -929,23 +929,60 @@ func add_upgrade(id: String) -> void:
 			n.position = Vector3(-0.42, 1.38, -1.22)
 			Kit.torus(n, 0.07, 0.078, Kit.emissive(Color("eaf4ff"), 4.0, true), Vector3(0, -0.12, 0)).scale = Vector3(1, 0.3, 1)
 		"coffee":
+			# espresso machine: brushed steel body, group head + portafilter, steam wand, drip tray, cups on top
 			n.position = Vector3(1.0, COUNTER_TOP, COUNTER_Z - 0.18)
-			var m := Kit.mat(Color("2b2f36"), 0.35, 0.6)
-			Kit.slab(n, Vector3(0.18, 0.28, 0.22), 0.02, 0.01, m, null, null, Vector3(0, 0.14, 0))
-			Kit.slab(n, Vector3(0.14, 0.02, 0.12), 0.01, 0.005, Kit.chrome(), null, null, Vector3(0, 0.01, 0.05))
-			Kit.cyl(n, 0.03, 0.06, Kit.plastic(Color("f2efe9"), 0.3), Vector3(0, 0.05, 0.07))
-			Kit.box(n, Vector3(0.05, 0.02, 0.01), Kit.emissive(Color("ff8a3c"), 2.0), Vector3(0, 0.24, 0.111))
-			Kit.cyl(n, 0.02, 0.03, Kit.chrome(), Vector3(0, 0.1, 0.09))
-			var cb := Kit.static_body(n, Kit.box_shape(Vector3(0.22, 0.32, 0.26)), Vector3(0, 0.15, 0), "coffee_machine")
+			var steel := Kit.aluminium(Color("c3c8cd"), 0.28)
+			var red := Kit.plastic(Color("c0392b"), 0.3, 0.1)
+			red.clearcoat_enabled = true
+			red.clearcoat = 0.8
+			var black := Kit.plastic(Color("1b1d21"), 0.4)
+			Kit.slab(n, Vector3(0.26, 0.2, 0.3), 0.025, 0.012, red, null, null, Vector3(0, 0.16, -0.01), Vector3(90, 0, 0))
+			Kit.slab(n, Vector3(0.27, 0.025, 0.31), 0.02, 0.008, steel, steel, steel, Vector3(0, 0.275, -0.01))
+			Kit.slab(n, Vector3(0.27, 0.03, 0.31), 0.02, 0.008, black, black, black, Vector3(0, 0.015, -0.01))
+			Kit.slab(n, Vector3(0.2, 0.012, 0.11), 0.01, 0.004, steel, steel, steel, Vector3(0, 0.036, 0.1))
+			for gx in range(5):
+				Kit.box(n, Vector3(0.18, 0.003, 0.004), black, Vector3(0, 0.043, 0.06 + gx * 0.02))
+			# group head + portafilter with a black handle
+			Kit.cyl(n, 0.035, 0.03, steel, Vector3(0, 0.16, 0.15))
+			Kit.cyl(n, 0.03, 0.022, steel, Vector3(0, 0.135, 0.15))
+			Kit.capsule(n, 0.011, 0.11, black, Vector3(0, 0.135, 0.22), Vector3(90, 0, 0))
+			# cup under the spout
+			Kit.lathe(n, [Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.022, 0.022), Vector3(0.05, 0.026, 0.026), Vector3(0.05, 0.023, 0.023), Vector3(0.006, 0.019, 0.019)], Kit.plastic(Color("f4f1ea"), 0.25), Vector3(0, 0.043, 0.15))
+			Kit.torus(n, 0.006, 0.011, Kit.plastic(Color("f4f1ea"), 0.25), Vector3(0.03, 0.07, 0.15), Vector3(90, 0, 0))
+			# steam wand
+			Kit.cyl(n, 0.005, 0.12, steel, Vector3(0.1, 0.16, 0.14), Vector3(0, 0, 12))
+			# pressure gauge + buttons
+			Kit.cyl(n, 0.026, 0.008, steel, Vector3(-0.07, 0.21, 0.141), Vector3(90, 0, 0))
+			Kit.cyl(n, 0.021, 0.004, Kit.mat(Color("f8f6f0"), 0.4), Vector3(-0.07, 0.21, 0.146), Vector3(90, 0, 0))
+			Kit.box(n, Vector3(0.002, 0.016, 0.002), red, Vector3(-0.066, 0.214, 0.149), Vector3(0, 0, -35))
+			for bx in range(3):
+				Kit.cyl(n, 0.009, 0.006, black, Vector3(0.03 + bx * 0.03, 0.225, 0.142), Vector3(90, 0, 0))
+			Kit.box(n, Vector3(0.012, 0.006, 0.003), Kit.emissive(Color("ff8a3c"), 2.5), Vector3(0.09, 0.247, 0.142))
+			# cups warming on top
+			for cx in [-0.07, 0.0, 0.07]:
+				Kit.lathe(n, [Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.018, 0.018), Vector3(0.04, 0.022, 0.022), Vector3(0.04, 0.019, 0.019), Vector3(0.005, 0.015, 0.015)], Kit.plastic(Color("ecf0f1"), 0.25), Vector3(cx, 0.288, -0.06))
+			var cb := Kit.static_body(n, Kit.box_shape(Vector3(0.28, 0.34, 0.34)), Vector3(0, 0.17, 0.02), "coffee_machine")
 			cb.collision_layer = 1
 			n.set_meta("body", cb)
 		"speaker":
+			# bluetooth speaker: rounded fabric body, woofer + tweeter, leather strap, LED ring
 			n.position = Vector3(0.62, COUNTER_TOP, COUNTER_Z - 0.2)
-			var sp := Kit.fabric(Color("2a2e35"), 0.9, 0.5, 60.0)
-			Kit.slab(n, Vector3(0.14, 0.24, 0.13), 0.03, 0.02, sp, null, null, Vector3(0, 0.12, 0), Vector3(0, -25, 0))
-			Kit.cyl(n, 0.045, 0.004, Kit.mat(Color("15171a"), 0.5), Vector3(0.0, 0.15, 0.06), Vector3(90, -25, 0))
-			Kit.box(n, Vector3(0.08, 0.005, 0.004), Kit.emissive(Color("3aa8ff"), 3.0), Vector3(0.0, 0.03, 0.058))
-			_upgrade_pick(n, id, Vector3(0.17, 0.26, 0.16), Vector3(0, 0.13, 0))
+			var fab := Kit.fabric(Color("3d4450"), 0.95, 0.6, 80.0)
+			var dark := Kit.mat(Color("15171a"), 0.45)
+			Kit.slab(n, Vector3(0.2, 0.14, 0.26), 0.05, 0.035, fab, null, null, Vector3(0, 0.13, 0), Vector3(90, 0, 0))
+			Kit.slab(n, Vector3(0.205, 0.02, 0.145), 0.05, 0.008, Kit.plastic(Color("2a2e35"), 0.4), null, null, Vector3(0, 0.008, 0))
+			Kit.torus(n, 0.055, 0.066, dark, Vector3(0, 0.15, 0.07), Vector3(90, 0, 0))
+			Kit.lathe(n, [Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.055, 0.055), Vector3(-0.018, 0.02, 0.02), Vector3(-0.018, 0.0, 0.0)], Kit.mat(Color("22252b"), 0.5), Vector3(0, 0.15, 0.072), Vector3(-90, 0, 0))
+			Kit.sphere(n, 0.016, Kit.mat(Color("8a9099"), 0.25, 0.7), Vector3(0, 0.15, 0.064), Vector3(1, 1, 0.5))
+			Kit.cyl(n, 0.018, 0.006, dark, Vector3(0, 0.055, 0.07), Vector3(90, 0, 0))
+			Kit.torus(n, 0.02, 0.024, Kit.emissive(Color("3aa8ff"), 3.0), Vector3(0, 0.055, 0.074), Vector3(90, 0, 0))
+			var strap := Kit.mat(Color("8b5a2b"), 0.6)
+			Kit.capsule(n, 0.008, 0.18, strap, Vector3(0, 0.26, 0), Vector3(0, 0, 90))
+			for sx in [-0.085, 0.085]:
+				Kit.cyl(n, 0.01, 0.03, Kit.chrome(), Vector3(sx, 0.25, 0))
+			for bx in range(3):
+				Kit.cyl(n, 0.008, 0.004, dark, Vector3(-0.03 + bx * 0.03, 0.22, 0.0))
+			_upgrade_pick(n, id, Vector3(0.22, 0.3, 0.16), Vector3(0, 0.14, 0))
 		"display":
 			# glass display cabinet next to the door with repaired gadgets
 			n.position = Vector3(-2.36, 0, 2.2)

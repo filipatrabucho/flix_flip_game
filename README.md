@@ -106,6 +106,22 @@ Os clientes entram pela porta da loja, fazem fila no balcão e esperam com um **
 - **Carteiro de boné** que entra pela porta com as encomendas e as deixa na prateleira «Receção».
 - **Ritmo de clientes**: os clientes já não esperam que acabes o trabalho anterior. Chegam um ou dois de cada vez, com intervalos irregulares, e o número de pedidos abertos sobe com os capítulos.
 
+## Partilhar com amigos (sem instalar nada)
+
+O projeto já tem dois perfis de exportação (`export_presets.cfg`):
+
+- **Web (browser)**: usa o renderizador *Compatibility*, que funciona em qualquer browser. Os amigos só abrem um link.
+- **Windows**: um único `.exe`. Descomprimem e fazem duplo clique.
+
+Passos:
+
+1. No Godot: **Editor → Gerir modelos de exportação → Transferir e instalar** (só da primeira vez).
+2. **Projeto → Exportar…**, escolhe **Web (browser)** e carrega em **Exportar projeto**. Fica em `build/web/`.
+3. Comprime o conteúdo da pasta `build/web/` num `.zip` (o `index.html` tem de ficar na raiz do zip).
+4. Cria uma conta em **itch.io**, faz **Upload new project**, escolhe *Kind of project: HTML*, envia o zip e marca «This file will be played in the browser». Em *Visibility* escolhe **Restricted** ou **Draft** e partilha a página secreta com os teus amigos.
+
+O jogo grava o progresso no browser de cada pessoa.
+
 ## Idiomas
 
 Português e English: Definições → Idioma / Language.
