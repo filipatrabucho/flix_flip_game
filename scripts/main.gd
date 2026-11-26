@@ -26,7 +26,7 @@ const Radial = preload("res://scripts/radial_menu.gd")
 const SAVE_PATH := "user://fix_flip_save_%d.json"
 const OLD_SAVE_PATH := "user://fix_flip_save.json"
 const SETTINGS_PATH := "user://fix_flip_settings.cfg"
-const VERSION := "v1.0"
+const VERSION := "v1.4"
 
 const YELLOW := Color("f5b82e")
 const PANEL_BG := Color(0.035, 0.06, 0.1, 0.84)
@@ -264,6 +264,15 @@ func _ready() -> void:
 func _load_fonts() -> void:
 	font_bold = _font("res://assets/fonts/Nunito-Bold.ttf")
 	font_xbold = _font("res://assets/fonts/Nunito-ExtraBold.ttf")
+	# symbols (★ ✓ ➜ ✕) are missing from Nunito and browsers have no system fallback fonts
+	var sym := _font("res://assets/fonts/DejaVuSans-Symbols.ttf")
+	if sym != ThemeDB.fallback_font:
+		for f in [font_bold, font_xbold, ThemeDB.fallback_font]:
+			if f and f != sym:
+				var fb: Array[Font] = f.fallbacks
+				if not fb.has(sym):
+					fb.append(sym)
+					f.fallbacks = fb
 
 
 func _font(path: String) -> Font:
