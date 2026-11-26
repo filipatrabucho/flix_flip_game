@@ -98,7 +98,7 @@ func _build() -> void:
 	shell_meshes.append(cv)
 	label3d(cover, "Comando sem fios  •  Modelo FX-C1  •  5V 0.5A", 22, 0.0001, Color("6c727a"), Vector3(0, BOT - CT - 0.00005, 0.018), Vector3(90, 180, 0))
 	add_target("cover", cover, Kit.box_shape(Vector3(W * 0.85, CT + 0.002, D * 0.85)), Vector3(0, BOT - CT * 0.5, 0), [cv], 0.0)
-	var spots := [Vector3(-0.042, 0, -0.022), Vector3(0.042, 0, -0.022), Vector3(-0.036, 0, 0.022), Vector3(0.036, 0, 0.022)]
+	var spots := [Vector3(-0.042, 0, -0.022), Vector3(0.042, 0, -0.022), Vector3(-0.019, 0, 0.021), Vector3(0.019, 0, 0.021)]
 	for i in range(spots.size()):
 		var p: Vector3 = spots[i]
 		p.y = BOT - CT - 0.00002
