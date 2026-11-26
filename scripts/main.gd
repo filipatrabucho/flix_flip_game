@@ -1750,7 +1750,7 @@ func _finish_order(o: Dictionary, tip: float, stars: int) -> void:
 func _spawn_cash(amount: float, near: Vector3) -> void:
 	var n := Node3D.new()
 	add_child(n)
-	var x := clampf(near.x, -0.3, 1.0)
+	var x := clampf(near.x, 0.1, 1.2)
 	n.global_position = Vector3(x + cash_items.size() * 0.12, Room.COUNTER_TOP, Room.COUNTER_Z + 0.12)
 	var note := Kit.fabric(Color("7fb77e"), 0.9, 0.3, 60.0)
 	for i in range(int(clampf(amount / 25.0, 2, 8))):

@@ -660,7 +660,7 @@ func _counter() -> void:
 	# cash register on the right, screen + keypad facing the workshop side (player)
 	register = Node3D.new()
 	register.name = "Register"
-	register.position = Vector3(x1 - 0.32, COUNTER_TOP, z - 0.06)
+	register.position = Vector3(x0 + 0.32, COUNTER_TOP, z - 0.06)
 	register.rotation_degrees.y = 180.0
 	root.add_child(register)
 	var reg := Kit.plastic(Color("2b2f36"), 0.4)
@@ -696,7 +696,7 @@ func _counter() -> void:
 	Kit.cyl(bell, 0.005, 0.015, Kit.chrome(), Vector3(0, 0.06, 0))
 	for i in range(5):
 		Kit.box(root, Vector3(0.085, 0.002, 0.055), Kit.mat(Color("f4f1ea"), 0.7), Vector3(cx + 0.12, COUNTER_TOP + 0.001 + i * 0.002, z + 0.18)).rotation_degrees.y = randf_range(-6, 6)
-	var tab := Kit.slab(root, Vector3(0.2, 0.012, 0.28), 0.015, 0.005, Kit.plastic(Color("17191c"), 0.3), null, null, Vector3(x0 + 0.3, COUNTER_TOP + 0.015, z - 0.05), Vector3(10, 20, 0))
+	var tab := Kit.slab(root, Vector3(0.2, 0.012, 0.28), 0.015, 0.005, Kit.plastic(Color("17191c"), 0.3), null, null, Vector3(x1 - 0.3, COUNTER_TOP + 0.015, z - 0.05), Vector3(10, -20, 0))
 	tab.name = "OrdersTablet"
 	var tl := Label3D.new()
 	tl.text = I18n.t("PEDIDOS  [P]")
@@ -704,8 +704,8 @@ func _counter() -> void:
 	tl.pixel_size = 0.0007
 	tl.modulate = Color("f5b82e")
 	tl.shaded = false
-	tl.position = Vector3(x0 + 0.3, COUNTER_TOP + 0.03, z - 0.05)
-	tl.rotation_degrees = Vector3(-80, 200, 0)
+	tl.position = Vector3(x1 - 0.3, COUNTER_TOP + 0.03, z - 0.05)
+	tl.rotation_degrees = Vector3(-80, 160, 0)
 	root.add_child(tl)
 	tablet_label = tl
 	# small plant + "repaired devices" shelf behind the counter
@@ -842,7 +842,7 @@ func add_upgrade(id: String) -> void:
 			n.position = Vector3(-0.42, 1.38, -1.22)
 			Kit.torus(n, 0.07, 0.078, Kit.emissive(Color("eaf4ff"), 4.0, true), Vector3(0, -0.12, 0)).scale = Vector3(1, 0.3, 1)
 		"coffee":
-			n.position = Vector3(-0.2, COUNTER_TOP, COUNTER_Z - 0.18)
+			n.position = Vector3(1.0, COUNTER_TOP, COUNTER_Z - 0.18)
 			var m := Kit.mat(Color("2b2f36"), 0.35, 0.6)
 			Kit.slab(n, Vector3(0.18, 0.28, 0.22), 0.02, 0.01, m, null, null, Vector3(0, 0.14, 0))
 			Kit.slab(n, Vector3(0.14, 0.02, 0.12), 0.01, 0.005, Kit.chrome(), null, null, Vector3(0, 0.01, 0.05))
@@ -962,10 +962,10 @@ func _receiving() -> void:
 		for i in range(3):
 			receive_slots.append(n.global_transform * Vector3(-0.3 + i * 0.3, y + 0.0125, 0.0))
 	var lamp := OmniLight3D.new()
-	lamp.position = RECEIVE_POS + Vector3(-0.6, 1.9, 0)
+	lamp.position = RECEIVE_POS + Vector3(-0.7, 2.0, 0)
 	lamp.light_color = Color("ffe6c4")
-	lamp.light_energy = 0.9
-	lamp.omni_range = 2.2
+	lamp.light_energy = 1.8
+	lamp.omni_range = 3.0
 	root.add_child(lamp)
 
 
@@ -988,10 +988,10 @@ func _pickup_shelf() -> void:
 			tag.position = Vector3(-0.25 + k * 0.5, y - 0.04, 0.21)
 			n.add_child(tag)
 	var lamp := OmniLight3D.new()
-	lamp.position = PICKUP_POS + Vector3(0.6, 1.9, 0)
+	lamp.position = PICKUP_POS + Vector3(0.7, 2.0, 0)
 	lamp.light_color = Color("ffe6c4")
-	lamp.light_energy = 0.9
-	lamp.omni_range = 2.2
+	lamp.light_energy = 1.8
+	lamp.omni_range = 3.0
 	root.add_child(lamp)
 
 
