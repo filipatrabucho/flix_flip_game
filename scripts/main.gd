@@ -1119,7 +1119,7 @@ func _inspect_click() -> void:
 	if stamina <= 0.5:
 		_toast(T("Estás exausto! Bebe um café ou vai dormir no quarto das traseiras."), true)
 		return
-	stamina = maxf(0.0, stamina - 1.6)
+	stamina = maxf(0.0, stamina - 1.0)
 	var target := hovered_target
 	d.set_hover("")
 	var dur := _perform(id, str(step["act"]), target) / DeviceBase.anim_speed
