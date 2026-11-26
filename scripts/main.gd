@@ -3874,8 +3874,8 @@ func _tools_save() -> Dictionary:
 func _default_decor() -> void:
 	_spawn_decor("poster_fixit", Transform3D(Basis.looking_at(Vector3(1, 0, 0), Vector3.UP), Vector3(2.597, 1.65, -0.55)))
 	_spawn_decor("poster_radio", Transform3D(Basis.looking_at(Vector3(-1, 0, 0), Vector3.UP), Vector3(-2.597, 1.65, 2.05)))
-	_spawn_decor("clock", Transform3D(Basis.looking_at(Vector3(0, 0, -1), Vector3.UP), Vector3(-1.75, 2.1, 2.597) * Vector3(1, 1, 1)))
-	_spawn_decor("string_lights", Transform3D(Basis.looking_at(Vector3(0, 0, 1), Vector3.UP), Vector3(1.2, 2.45, -1.745)))
+	_spawn_decor("clock", Transform3D(Basis.looking_at(Vector3(0, 0, 1), Vector3.UP), Vector3(-1.75, 2.1, 2.597)))
+	_spawn_decor("string_lights", Transform3D(Basis.looking_at(Vector3(0, 0, -1), Vector3.UP), Vector3(1.2, 2.45, -1.745)))
 	_spawn_decor("cactus", Transform3D(Basis.IDENTITY, Vector3(1.38, Room.COUNTER_TOP, Room.COUNTER_Z + 0.1)))
 
 
