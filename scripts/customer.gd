@@ -67,6 +67,11 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	skin.rim_tint = 0.4
 	skin.subsurf_scatter_enabled = true
 	skin.subsurf_scatter_strength = 0.25
+	skin.normal_enabled = true
+	skin.normal_texture = Kit.noise_tex(0.9, true, 1.5, 256)
+	skin.normal_scale = 0.12
+	skin.uv1_scale = Vector3(6, 6, 6)
+	skin.uv1_triplanar = true
 	var shirt := Kit.fabric(shirt_c, 0.9, 0.3, 14.0)
 	var pants := Kit.fabric(pants_c, 0.92, 0.45, 16.0)
 	var shoe := Kit.mat(Color("221d1a") if rng.randf() < 0.6 else Color("e8e8e8"), 0.45)
@@ -77,6 +82,13 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	var wide := rng.randf_range(0.92, 1.08)         # shoulder width variation
 	var hipw := rng.randf_range(0.94, 1.1)
 	var long_sleeves := rng.randf() < 0.5
+	var outfit := rng.randi() % 3        # 0 shirt, 1 hoodie, 2 open jacket over t-shirt
+	if extras.has("apron") or extras.has("beard"):
+		outfit = 0
+	var tee_c: Color = [Color("f4f1ea"), Color("2b2f36"), Color("e9c46a"), Color("8ecae6")][rng.randi() % 4]
+	var tee := Kit.fabric(tee_c, 0.9, 0.3, 14.0)
+	if outfit != 0:
+		long_sleeves = true
 	hips = Node3D.new()
 	hips.position = Vector3(0, 0.92, 0)
 	add_child(hips)
@@ -109,9 +121,36 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	Kit.lathe(torso, [Vector3(0.05, 0.16, 0.108), Vector3(0.14, 0.148, 0.102), Vector3(0.24, 0.156, 0.108), Vector3(0.35, 0.176 * wide, 0.118), Vector3(0.45, 0.19 * wide, 0.12), Vector3(0.52, 0.18 * wide, 0.11), Vector3(0.565, 0.13 * wide, 0.085), Vector3(0.59, 0.055, 0.05)], shirt, Vector3.ZERO, Vector3.ZERO, 28)
 	Kit.box(torso, Vector3(0.33 * hipw, 0.035, 0.225), Kit.mat(Color("2a211b"), 0.4, 0.2), Vector3(0, 0.065, 0))
 	Kit.box(torso, Vector3(0.05, 0.03, 0.01), Kit.chrome(Color("c9b27a")), Vector3(0, 0.065, 0.112))
-	Kit.torus(torso, 0.043, 0.06, shirt, Vector3(0, 0.585, 0.0)).scale = Vector3(1.1, 0.6, 1.0)
-	for i in range(3):
-		Kit.cyl(torso, 0.006, 0.004, Kit.mat(shirt_c.darkened(0.4), 0.4), Vector3(0, 0.48 - i * 0.1, 0.122 - i * 0.002), Vector3(90, 0, 0))
+	match outfit:
+		0:
+			# collared shirt with buttons and a breast pocket
+			Kit.torus(torso, 0.043, 0.06, shirt, Vector3(0, 0.585, 0.0)).scale = Vector3(1.1, 0.6, 1.0)
+			for side in [-1.0, 1.0]:
+				var col := Kit.box(torso, Vector3(0.06, 0.006, 0.04), shirt, Vector3(side * 0.03, 0.575, 0.06), Vector3(30, side * 25.0, 0))
+				col.rotation_degrees.z = side * -20.0
+			for i in range(4):
+				Kit.cyl(torso, 0.0055, 0.004, Kit.mat(shirt_c.darkened(0.45), 0.4), Vector3(0, 0.5 - i * 0.1, 0.121 - i * 0.002), Vector3(90, 0, 0))
+			Kit.box(torso, Vector3(0.002, 0.42, 0.003), Kit.mat(shirt_c.darkened(0.2), 0.8), Vector3(0, 0.33, 0.121))
+			Kit.box(torso, Vector3(0.06, 0.07, 0.004), Kit.fabric(shirt_c.darkened(0.08), 0.9), Vector3(-0.07, 0.44, 0.118))
+		1:
+			# hoodie: hood behind the neck, kangaroo pocket, drawstrings
+			Kit.torus(torso, 0.05, 0.075, shirt, Vector3(0, 0.575, -0.02)).scale = Vector3(1.15, 0.9, 1.1)
+			Kit.lathe(torso, [Vector3(0.52, 0.09, 0.05), Vector3(0.6, 0.1, 0.06), Vector3(0.68, 0.085, 0.05), Vector3(0.72, 0.0, 0.0)], shirt, Vector3(0, 0, -0.08), Vector3.ZERO, 18)
+			Kit.lathe(torso, [Vector3(0.1, 0.11, 0.03), Vector3(0.22, 0.1, 0.03)], Kit.fabric(shirt_c.darkened(0.1), 0.9), Vector3(0, 0, 0.098), Vector3.ZERO, 16)
+			for side in [-1.0, 1.0]:
+				Kit.cyl(torso, 0.003, 0.14, Kit.mat(Color("f4f6f8"), 0.6), Vector3(side * 0.025, 0.5, 0.118))
+				Kit.sphere(torso, 0.006, Kit.mat(Color("d9dde2"), 0.4), Vector3(side * 0.025, 0.43, 0.12))
+			Kit.cyl(torso, 0.15, 0.04, Kit.fabric(shirt_c.darkened(0.15), 0.9), Vector3(0, 0.08, 0)).scale = Vector3(1.08, 1, 0.75)
+		_:
+			# open jacket over a t-shirt: lapels and a zip line
+			var panel := Kit.slab(torso, Vector3(0.1, 0.006, 0.42), 0.02, 0.002, tee, tee, tee, Vector3(0, 0.33, 0.118), Vector3(-90, 0, 0))
+			panel.rotation_degrees.x = -92.0
+			for side in [-1.0, 1.0]:
+				var lap := Kit.box(torso, Vector3(0.05, 0.3, 0.012), shirt, Vector3(side * 0.07, 0.4, 0.124), Vector3(0, side * -10.0, side * 8.0))
+				lap.name = "Lapel"
+				Kit.box(torso, Vector3(0.05, 0.08, 0.012), Kit.fabric(shirt_c.darkened(0.2), 0.9), Vector3(side * 0.085, 0.53, 0.1), Vector3(-20, 0, side * 25.0))
+				Kit.box(torso, Vector3(0.002, 0.3, 0.004), Kit.chrome(Color("b8bec5")), Vector3(side * 0.045, 0.35, 0.131))
+			Kit.torus(torso, 0.046, 0.058, tee, Vector3(0, 0.58, 0.0)).scale = Vector3(1.1, 0.5, 1.0)
 	Kit.lathe(torso, [Vector3(0.55, 0.056, 0.058), Vector3(0.6, 0.052, 0.054), Vector3(0.66, 0.05, 0.052)], skin, Vector3.ZERO, Vector3.ZERO, 16)
 	# --- arms: shoulder -> elbow -> forearm -> hand
 	for side in [-1.0, 1.0]:
@@ -154,8 +193,9 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	eyelids.clear()
 	for side in [-1.0, 1.0]:
 		var eye := Node3D.new()
-		eye.position = Vector3(side * 0.034, 0.145, 0.083)
+		eye.position = Vector3(side * 0.034, 0.145, 0.08)
 		head.add_child(eye)
+		Kit.sphere(head, 0.02, Kit.mat(skin_c.darkened(0.12), 0.6), Vector3(side * 0.034, 0.145, 0.074), Vector3(1.15, 0.85, 0.6))
 		Kit.sphere(eye, 0.0145, white, Vector3.ZERO)
 		Kit.cyl(eye, 0.0075, 0.002, iris, Vector3(0, 0, 0.0132), Vector3(90, 0, 0), -1.0, 20)
 		Kit.cyl(eye, 0.0036, 0.0022, pupil, Vector3(0, 0, 0.0138), Vector3(90, 0, 0), -1.0, 16)
@@ -165,6 +205,8 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 		var lid_mesh := Kit.sphere(lid, 0.0158, skin, Vector3(0, 0.0, 0.0), Vector3(1.0, 1.0, 1.0))
 		lid_mesh.position = Vector3(0, 0.0105, 0.002)
 		lid_mesh.scale = Vector3(1.05, 0.55, 1.0)
+		var lash := Kit.capsule(lid, 0.0012, 0.026, Kit.mat(Color("15100c"), 0.5), Vector3(0, 0.0095, 0.0135), Vector3(0, 0, 90))
+		lash.rotation_degrees.x = -25.0
 		eyelids.append(lid)
 		var brow := Node3D.new()
 		brow.position = Vector3(side * 0.036, 0.168, 0.091)
@@ -197,6 +239,18 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 			var cap := Kit.fabric(Color.from_hsv(rng.randf(), 0.6, 0.7), 0.8, 0.3, 30.0)
 			Kit.lathe(head, [Vector3(0.17, 0.095, 0.103), Vector3(0.22, 0.088, 0.096), Vector3(0.255, 0.06, 0.068), Vector3(0.275, 0.0, 0.0)], cap, Vector3.ZERO, Vector3.ZERO, 26, [-0.006, -0.006, -0.008, -0.008])
 			Kit.slab(head, Vector3(0.15, 0.008, 0.08), 0.035, 0.003, cap, cap, cap, Vector3(0, 0.178, 0.115), Vector3(-10, 0, 0))
+	if hair_style in [1, 2] and rng.randf() < 0.6:
+		# fringe / bangs
+		Kit.lathe(head, [Vector3(0.17, 0.088, 0.03), Vector3(0.215, 0.08, 0.03), Vector3(0.24, 0.06, 0.02)], hair, Vector3(0, 0, 0.068), Vector3.ZERO, 18)
+	if hair_style == 0 and rng.randf() < 0.35:
+		# curly volume
+		for i in range(26):
+			var a := rng.randf() * TAU
+			var y := rng.randf_range(0.17, 0.27)
+			var r := sqrt(maxf(0.0, 1.0 - pow((y - 0.15) / 0.13, 2))) * 0.1
+			Kit.sphere(head, 0.028, hair, Vector3(cos(a) * r, y, sin(a) * r * 1.05 - 0.01))
+	for side in [-1.0, 1.0]:
+		Kit.box(head, Vector3(0.008, 0.035, 0.014), hair, Vector3(side * 0.087, 0.15, 0.02))
 	if "glasses" in extras:
 		var frame := Kit.mat(Color("1b1b1b"), 0.3, 0.3)
 		for side in [-1.0, 1.0]:
@@ -360,7 +414,10 @@ func _process(delta: float) -> void:
 			el.rotation.x = lerpf(el.rotation.x, -0.12, k)
 			er.rotation.x = lerpf(er.rotation.x, -0.12, k)
 		hips.position.y = 0.92 + sin(t * 1.8) * 0.005
+		hips.rotation.z = sin(t * 0.35) * 0.025
+		torso.rotation.z = -sin(t * 0.35) * 0.02
 		torso.rotation.x = sin(t * 1.8) * 0.008
+		head.rotation.z = sin(t * 0.5 + 1.0) * 0.04
 	if holding:
 		arm_l.rotation.x = -0.35
 		arm_r.rotation.x = -0.35
