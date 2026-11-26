@@ -10,6 +10,8 @@ var sfx_players: Array[AudioStreamPlayer] = []
 var cache: Dictionary = {}
 var music_volume := 0.6
 var sfx_volume := 0.8
+var playlist: Array = []
+var playlist_index := 0
 
 
 func _ready() -> void:
@@ -18,6 +20,7 @@ func _ready() -> void:
 	for m in [music_a, music_b]:
 		m.volume_db = -80.0
 		add_child(m)
+		m.finished.connect(_on_track_finished.bind(m))
 	for i in range(10):
 		var p := AudioStreamPlayer.new()
 		add_child(p)
@@ -50,7 +53,30 @@ func play(name: String, volume := 1.0, pitch_jitter := 0.06) -> void:
 			return
 
 
+## Plays a shuffled list of tracks one after another (forever).
+func play_playlist(tracks: Array) -> void:
+	if playlist == tracks and current_track in tracks:
+		return
+	playlist = tracks.duplicate()
+	playlist.shuffle()
+	playlist_index = 0
+	_start(playlist[0], false)
+
+
+func _on_track_finished(player: AudioStreamPlayer) -> void:
+	if playlist.is_empty() or player.volume_db < -39.0:
+		return
+	playlist_index = (playlist_index + 1) % playlist.size()
+	current_track = ""
+	_start(playlist[playlist_index], false)
+
+
 func play_music(track: String) -> void:
+	playlist = []
+	_start(track, true)
+
+
+func _start(track: String, loop: bool) -> void:
 	if track == current_track:
 		return
 	current_track = track
@@ -58,7 +84,8 @@ func play_music(track: String) -> void:
 	if s == null:
 		return
 	if s is AudioStreamOggVorbis:
-		(s as AudioStreamOggVorbis).loop = true
+		s = (s as AudioStreamOggVorbis).duplicate()
+		(s as AudioStreamOggVorbis).loop = loop
 	var incoming := music_b if music_a.playing else music_a
 	var outgoing := music_a if incoming == music_b else music_b
 	incoming.stream = s

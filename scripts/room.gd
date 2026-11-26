@@ -26,6 +26,9 @@ var spot_lights: Array[Light3D] = []
 var door: Node3D
 var bell: Node3D
 var door_sign: Label3D
+var register: Node3D
+var register_drawer: Node3D
+var register_screen: Label3D
 var tablet_label: Label3D
 var rng := RandomNumberGenerator.new()
 
@@ -650,14 +653,34 @@ func _counter() -> void:
 		logo.font = f
 	logo.position = Vector3(cx, 0.62, z + 0.285)
 	root.add_child(logo)
-	# cash register
+	# cash register on the right, screen + keypad facing the workshop side (player)
+	register = Node3D.new()
+	register.name = "Register"
+	register.position = Vector3(x1 - 0.32, COUNTER_TOP, z - 0.06)
+	register.rotation_degrees.y = 180.0
+	root.add_child(register)
 	var reg := Kit.plastic(Color("2b2f36"), 0.4)
-	var rp := Vector3(x0 + 0.35, COUNTER_TOP, z - 0.08)
-	Kit.slab(root, Vector3(0.34, 0.09, 0.3), 0.02, 0.01, reg, null, null, rp + Vector3(0, 0.045, 0))
-	Kit.slab(root, Vector3(0.24, 0.02, 0.14), 0.01, 0.005, Kit.plastic(Color("d9dde2"), 0.4), null, null, rp + Vector3(0, 0.1, 0.05), Vector3(-15, 0, 0))
-	var scr := Kit.slab(root, Vector3(0.22, 0.14, 0.015), 0.008, 0.005, reg, null, null, rp + Vector3(0, 0.2, -0.08), Vector3(-12, 0, 0))
-	scr.name = "RegisterScreen"
-	Kit.box(root, Vector3(0.19, 0.11, 0.002), Kit.emissive(Color("2ecc71"), 1.2, true), rp + Vector3(0, 0.2, -0.071)).rotation_degrees.x = -12
+	Kit.slab(register, Vector3(0.34, 0.09, 0.3), 0.02, 0.01, reg, null, null, Vector3(0, 0.045, 0))
+	register_drawer = Node3D.new()
+	register_drawer.position = Vector3(0, 0.03, 0.15)
+	register.add_child(register_drawer)
+	Kit.slab(register_drawer, Vector3(0.3, 0.05, 0.02), 0.006, 0.004, Kit.plastic(Color("3a3f46"), 0.4), null, null, Vector3.ZERO, Vector3(90, 0, 0))
+	Kit.box(register_drawer, Vector3(0.08, 0.008, 0.01), Kit.chrome(), Vector3(0, 0.0, 0.012))
+	Kit.slab(register, Vector3(0.24, 0.02, 0.14), 0.01, 0.005, Kit.plastic(Color("d9dde2"), 0.4), null, null, Vector3(0, 0.1, 0.05), Vector3(-15, 0, 0))
+	for r in range(3):
+		for c in range(4):
+			Kit.box(register, Vector3(0.035, 0.008, 0.025), Kit.plastic(Color("f4f6f8") if c < 3 else Color("e1b12c"), 0.4), Vector3(-0.075 + c * 0.05, 0.113 - r * 0.009, 0.025 + r * 0.035)).rotation_degrees.x = -15
+	Kit.slab(register, Vector3(0.22, 0.14, 0.015), 0.008, 0.005, reg, null, null, Vector3(0, 0.2, -0.08), Vector3(-12, 0, 0)).name = "RegisterScreen"
+	register_screen = Label3D.new()
+	register_screen.text = "€ 0,00"
+	register_screen.font_size = 64
+	register_screen.pixel_size = 0.0009
+	register_screen.modulate = Color("7dffa0")
+	register_screen.shaded = false
+	register_screen.position = Vector3(0, 0.2, -0.0705)
+	register_screen.rotation_degrees.x = -12
+	register.add_child(register_screen)
+	Kit.box(register, Vector3(0.19, 0.11, 0.002), Kit.mat(Color("0c1f14"), 0.2), Vector3(0, 0.2, -0.0718)).rotation_degrees.x = -12
 	# card terminal + service bell + business cards + tablet
 	Kit.slab(root, Vector3(0.075, 0.03, 0.14), 0.012, 0.008, Kit.plastic(Color("1b1d21"), 0.4), null, null, Vector3(x0 + 0.68, COUNTER_TOP + 0.015, z + 0.14), Vector3(0, 15, 0))
 	Kit.box(root, Vector3(0.055, 0.003, 0.04), Kit.emissive(Color("6ec6ff"), 0.8, true), Vector3(x0 + 0.68, COUNTER_TOP + 0.031, z + 0.12)).rotation_degrees.y = 15
@@ -669,7 +692,7 @@ func _counter() -> void:
 	Kit.cyl(bell, 0.005, 0.015, Kit.chrome(), Vector3(0, 0.06, 0))
 	for i in range(5):
 		Kit.box(root, Vector3(0.085, 0.002, 0.055), Kit.mat(Color("f4f1ea"), 0.7), Vector3(cx + 0.12, COUNTER_TOP + 0.001 + i * 0.002, z + 0.18)).rotation_degrees.y = randf_range(-6, 6)
-	var tab := Kit.slab(root, Vector3(0.2, 0.012, 0.28), 0.015, 0.005, Kit.plastic(Color("17191c"), 0.3), null, null, Vector3(x1 - 0.3, COUNTER_TOP + 0.015, z - 0.05), Vector3(10, -20, 0))
+	var tab := Kit.slab(root, Vector3(0.2, 0.012, 0.28), 0.015, 0.005, Kit.plastic(Color("17191c"), 0.3), null, null, Vector3(x0 + 0.3, COUNTER_TOP + 0.015, z - 0.05), Vector3(10, 20, 0))
 	tab.name = "OrdersTablet"
 	var tl := Label3D.new()
 	tl.text = I18n.t("PEDIDOS  [P]")
@@ -677,8 +700,8 @@ func _counter() -> void:
 	tl.pixel_size = 0.0007
 	tl.modulate = Color("f5b82e")
 	tl.shaded = false
-	tl.position = Vector3(x1 - 0.3, COUNTER_TOP + 0.03, z - 0.05)
-	tl.rotation_degrees = Vector3(-80, -20, 0)
+	tl.position = Vector3(x0 + 0.3, COUNTER_TOP + 0.03, z - 0.05)
+	tl.rotation_degrees = Vector3(-80, 200, 0)
 	root.add_child(tl)
 	tablet_label = tl
 	# small plant + "repaired devices" shelf behind the counter
@@ -819,7 +842,7 @@ func add_upgrade(id: String) -> void:
 			Kit.box(n, Vector3(0.05, 0.02, 0.01), Kit.emissive(Color("ff8a3c"), 2.0), Vector3(0, 0.24, 0.111))
 			Kit.cyl(n, 0.02, 0.03, Kit.chrome(), Vector3(0, 0.1, 0.09))
 		"speaker":
-			n.position = Vector3(1.25, COUNTER_TOP, COUNTER_Z - 0.2)
+			n.position = Vector3(0.62, COUNTER_TOP, COUNTER_Z - 0.2)
 			var sp := Kit.fabric(Color("2a2e35"), 0.9, 0.5, 60.0)
 			Kit.slab(n, Vector3(0.14, 0.24, 0.13), 0.03, 0.02, sp, null, null, Vector3(0, 0.12, 0), Vector3(0, -25, 0))
 			Kit.cyl(n, 0.045, 0.004, Kit.mat(Color("15171a"), 0.5), Vector3(0.0, 0.15, 0.06), Vector3(90, -25, 0))
@@ -875,3 +898,13 @@ func clear_upgrades() -> void:
 	if lamp_light:
 		lamp_light.light_color = Color("ffe2b5")
 		lamp_light.light_energy = 3.4
+
+
+func ring_register(amount_text: String) -> void:
+	if register_screen:
+		register_screen.text = amount_text
+	if register_drawer:
+		var t := register_drawer.create_tween()
+		t.tween_property(register_drawer, "position:z", 0.25, 0.15)
+		t.tween_interval(0.6)
+		t.tween_property(register_drawer, "position:z", 0.15, 0.25)

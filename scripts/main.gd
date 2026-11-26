@@ -1456,6 +1456,22 @@ func _new_order(silent := false, story_key := "") -> Dictionary:
 	return o
 
 
+## Calm start: one job at a time in the first chapters, more as the story advances.
+func _max_open_orders() -> int:
+	match _chapter_id():
+		"c1", "c2":
+			return 1
+		"c3":
+			return 2
+		"c4":
+			return 3
+	return 4
+
+
+func _open_orders() -> int:
+	return orders.size()
+
+
 func _order_tick() -> void:
 	var now := _abs_minutes()
 	if now >= next_order_at:
@@ -1463,7 +1479,7 @@ func _order_tick() -> void:
 		for o in orders:
 			if o["status"] == "new":
 				pending += 1
-		if pending < 3 and minutes < 18 * 60:
+		if _open_orders() < _max_open_orders() and pending == 0 and minutes < 18 * 60:
 			_new_order()
 		var rate := clampf(_reputation() / 4.0, 0.7, 1.25) * (1.5 if bool(story_flags.get("press", false)) else 1.0) * (1.3 if upgrades.has("neon") else 1.0)
 		next_order_at = now + randf_range(55, 115) / rate
@@ -1571,6 +1587,7 @@ func _deliver(id: String, tip: float, stars: int) -> void:
 		c.hold(_device_standin(id))
 		c.set_mood("happy")
 	_customer_leave(int(o["id"]), "happy")
+	next_order_at = minf(next_order_at, _abs_minutes() + 12.0)
 	if gain > 0.0:
 		_toast(T("+%s  %s ficou muito contente!") % [_eur(gain), o["customer"]], false, GREEN)
 	_save_game()
@@ -1623,9 +1640,8 @@ func _morning_orders() -> void:
 		var key: String = queued.pop_front()
 		story_flags["queue"] = queued
 		_new_order(true, key)
-	else:
+	elif _open_orders() < _max_open_orders():
 		_new_order(true)
-	_new_order(true)
 
 
 # =============================================================================
@@ -3384,7 +3400,7 @@ func _start_game(first: bool) -> void:
 		menu_root.hide()
 		hud.show()
 		mode = "walk"
-		audio.play_music("music_workshop")
+		audio.play_playlist(["music_workshop", "music_workshop2", "music_workshop3", "music_workshop4", "music_evening"])
 		_reset_walk_camera()
 		_equip("none")
 		crosshair.show()
