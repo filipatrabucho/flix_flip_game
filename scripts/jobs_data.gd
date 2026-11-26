@@ -25,17 +25,17 @@ const UPGRADES := {
 const SIZE := {"laptop": "L", "console": "L", "radio": "L", "rotary": "L", "phone": "S", "handheld": "S", "gamepad": "S"}
 
 const PARTS := {
-	"battery": {"name": "Bateria de portátil", "price": 35},
-	"laptop_fan": {"name": "Ventoinha de portátil", "price": 22},
-	"ssd": {"name": "SSD NVMe 512 GB", "price": 45},
-	"phone_screen": {"name": "Ecrã de telemóvel", "price": 45},
-	"phone_battery": {"name": "Bateria de telemóvel", "price": 18},
-	"joystick": {"name": "Módulo analógico", "price": 9},
-	"console_fan": {"name": "Ventoinha de consola", "price": 18},
-	"disc_drive": {"name": "Leitor de discos", "price": 40},
-	"handheld_battery": {"name": "Bateria de consola portátil", "price": 15},
-	"ringer": {"name": "Bobina de campainha", "price": 12},
-	"radio_tube": {"name": "Válvula de rádio", "price": 14},
+	"battery": {"name": "Bateria de portátil", "price": 35, "device": "laptop"},
+	"laptop_fan": {"name": "Ventoinha de portátil", "price": 22, "device": "laptop"},
+	"ssd": {"name": "SSD NVMe 512 GB", "price": 45, "device": "laptop"},
+	"phone_screen": {"name": "Ecrã de telemóvel", "price": 45, "device": "phone"},
+	"phone_battery": {"name": "Bateria de telemóvel", "price": 18, "device": "phone"},
+	"joystick": {"name": "Módulo analógico", "price": 9, "device": "gamepad"},
+	"console_fan": {"name": "Ventoinha de consola", "price": 18, "device": "console"},
+	"disc_drive": {"name": "Leitor de discos", "price": 40, "device": "console"},
+	"handheld_battery": {"name": "Bateria de consola portátil", "price": 15, "device": "handheld"},
+	"ringer": {"name": "Bobina de campainha", "price": 12, "device": "rotary"},
+	"radio_tube": {"name": "Válvula de rádio", "price": 14, "device": "radio"},
 }
 
 static func open_steps(cover_word: String) -> Array:

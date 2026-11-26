@@ -92,10 +92,20 @@ var inventory: Dictionary = {}         # part key -> count
 var ratings: Array = []                # customer star ratings
 var next_order_at := 0.0
 var order_seq := 0
+var order_number := 0
 var FAULTS: Dictionary = Data.faults()
 var customers: Dictionary = {}         # order id -> customer node
 var counter_queue: Array = []
 var upgrades: Dictionary = {}          # upgrade id -> true
+var deliveries: Array = []             # parts in transit: {key, arrive}
+var parcels: Array = []                # parcels on the receiving shelf: {key, node, body, slot}
+var carrying: Dictionary = {}          # {"order": o} while holding a repaired device
+var carry_node: Node3D
+var shelf_items: Array = [null, null, null, null]   # pickup shelf slots -> {order, node}
+var shelf_bodies: Array = []
+var cash_items: Array = []             # money left on the counter: {amount, node, body}
+var part_icons: Dictionary = {}
+var shop_filter := "all"
 var story_chapter := 0
 var story_deliveries := 0
 var story_flags: Dictionary = {}
@@ -118,6 +128,8 @@ var walk_yaw := 0.0
 var walk_pitch := -0.42
 var hovered_pick := ""
 var hovered_target := ""
+var hovered_cash: Dictionary = {}
+var hovered_parcel: Dictionary = {}
 var inspect_base := Transform3D()
 var inspect_focus := Vector3.ZERO
 var orbit := Vector2.ZERO
@@ -198,6 +210,7 @@ func _ready() -> void:
 	_build_hand()
 	_reset_jobs()
 	_build_icons()
+	_build_shelf_targets()
 	_build_ui()
 	_apply_settings()
 	_show_menu()
@@ -638,6 +651,15 @@ func _walk_hover() -> void:
 		elif t.begins_with("tool:"):
 			pick = t
 			where = hit.collider.global_position + Vector3(0, 0.07, 0)
+		elif t.begins_with("shelf:") or t == "cash" or t.begins_with("parcel"):
+			pick = t
+			where = hit.collider.global_position + Vector3(0, 0.12, 0)
+			if t == "cash":
+				pick = "cash"
+				hovered_cash = hit.collider.get_meta("cash")
+				hovered_pick = ""
+			elif t.begins_with("parcel"):
+				hovered_parcel = hit.collider.get_meta("parcel")
 		elif t == "customer":
 			var cn: Node3D = hit.collider.get_meta("customer")
 			if is_instance_valid(cn) and not cn.walking:
@@ -655,6 +677,24 @@ func _walk_hover() -> void:
 		prompt.hide()
 		return
 	var text := ""
+	if pick.begins_with("shelf:"):
+		var si := int(pick.substr(6))
+		if not carrying.is_empty() and shelf_items[si] == null:
+			text = T("Pousar no lugar #%d") % (si + 1)
+		elif carrying.is_empty() and shelf_items[si] != null:
+			var so: Dictionary = shelf_items[si]["order"]
+			text = T("Pegar pedido #%d (%s)") % [int(so["number"]), so["customer"]]
+		else:
+			prompt.hide()
+			return
+		_show_prompt("E", text, where)
+		return
+	if pick == "cash":
+		_show_prompt("E", T("Guardar %s na caixa") % _eur(float(hovered_cash.get("amount", 0.0))), where)
+		return
+	if pick.begins_with("parcel"):
+		_show_prompt("E", T("Abrir encomenda: %s") % T(Data.PARTS[hovered_parcel.get("key", "battery")]["name"]), where)
+		return
 	if pick.begins_with("cust:"):
 		var cc: Node3D = customers.get(int(pick.substr(5)))
 		if cc == null:
@@ -664,7 +704,7 @@ func _walk_hover() -> void:
 		text = (T("Entregar a %s") if purpose == "pickup" else T("Falar com %s")) % cc.display_name
 	elif pick.begins_with("device:"):
 		var id := pick.substr(7)
-		text = T("Reparar %s de %s") % [_dev_name(id), jobs[id]["order"]["customer"]] if not jobs[id]["done"] else T("%s reparado") % _dev_name(id)
+		text = T("Reparar %s de %s") % [_dev_name(id), jobs[id]["order"]["customer"]] if not jobs[id]["done"] else T("Pegar %s reparado") % _dev_name(id).to_lower()
 	else:
 		var tid := pick.substr(5)
 		text = T("Pegar %s") % T(Tools.NAMES[tid]) if tool != tid else T("Pousar %s") % T(Tools.NAMES[tid])
@@ -690,9 +730,30 @@ func _interact_walk() -> void:
 		if cc and is_instance_valid(cc):
 			_talk_to_customer(cc)
 		return
+	if hovered_pick.begins_with("shelf:"):
+		var si := int(hovered_pick.substr(6))
+		if not carrying.is_empty() and shelf_items[si] == null:
+			_shelf_place(si)
+		elif carrying.is_empty() and shelf_items[si] != null:
+			_shelf_take(si)
+		return
+	if hovered_pick == "cash":
+		if not hovered_cash.is_empty() and cash_items.has(hovered_cash):
+			_collect_cash(hovered_cash)
+		return
+	if hovered_pick.begins_with("parcel"):
+		if not hovered_parcel.is_empty() and parcels.has(hovered_parcel):
+			_open_parcel(hovered_parcel)
+		return
 	if hovered_pick.begins_with("device:"):
 		var id := hovered_pick.substr(7)
-		if not jobs.has(id) or jobs[id]["done"]:
+		if not jobs.has(id):
+			return
+		if jobs[id]["done"]:
+			_pick_device(id)
+			return
+		if not carrying.is_empty():
+			_toast(T("Pousa primeiro o que tens nas mãos."), true)
 			return
 		_enter_inspect(id)
 	elif hovered_pick.begins_with("tool:"):
@@ -833,7 +894,18 @@ func _ensure_part(id: String, step: Dictionary) -> void:
 		d.spawn_part(part, _spot(id)["part"])
 		_toast(T("Tiraste do stock: %s") % T(Data.PARTS[part]["name"]), false, GREEN)
 	else:
-		_toast(T("Falta a peça: %s. Compra-a na Loja (L).") % T(Data.PARTS[part]["name"]), true)
+		var coming := false
+		for dl in deliveries:
+			if dl["key"] == part:
+				coming = true
+		for pc in parcels:
+			if pc["key"] == part:
+				_toast(T("A peça está na receção (junto à porta): abre a encomenda."), true)
+				return
+		if coming:
+			_toast(T("A peça vem a caminho. Volta quando chegar à receção."), true)
+		else:
+			_toast(T("Falta a peça: %s. Compra-a na Loja (L).") % T(Data.PARTS[part]["name"]), true)
 
 
 func _restore_pose(_id: String) -> float:
@@ -1268,6 +1340,9 @@ func _dust_puff(pos: Vector3) -> void:
 # Hand
 # =============================================================================
 func _equip(id: String) -> void:
+	if id != "none" and not carrying.is_empty():
+		_toast(T("Pousa primeiro o que tens nas mãos."), true)
+		return
 	if id != tool:
 		_sfx("pickup", 0.7)
 	tool = id
@@ -1444,7 +1519,7 @@ func _new_order(silent := false, story_key := "") -> Dictionary:
 		pay = snappedf(float(FAULTS[fk]["pay"]) * randf_range(0.9, 1.2) * rep_bonus * (1.15 if bool(story_flags.get("press", false)) else 1.0) * (1.1 if upgrades.has("display") else 1.0), 5.0)
 	order_seq += 1
 	var o := {
-		"id": order_seq, "customer": cust_name, "color": cust_color, "device": FAULTS[fk]["device"], "fault": fk,
+		"id": order_seq, "number": _next_order_number(), "customer": cust_name, "color": cust_color, "device": FAULTS[fk]["device"], "fault": fk,
 		"complaint": complaint, "pay": pay, "story": story_key,
 		"deadline": _abs_minutes() + randf_range(180, 330), "expires": _abs_minutes() + (9999.0 if story_key != "" else (230.0 if upgrades.has("coffee") else 170.0)), "status": "new",
 	}
@@ -1454,6 +1529,11 @@ func _new_order(silent := false, story_key := "") -> Dictionary:
 		_toast(T("Novo cliente no balcão: %s trouxe um %s.") % [o["customer"], _dev_name(o["device"]).to_lower()], false, YELLOW)
 	_refresh_orders_badge()
 	return o
+
+
+func _next_order_number() -> int:
+	order_number += 1
+	return order_number
 
 
 ## Calm start: one job at a time in the first chapters, more as the story advances.
@@ -1491,6 +1571,7 @@ func _order_tick() -> void:
 			_toast(T("%s cansou-se de esperar e foi embora.") % o["customer"], true)
 			_refresh_orders_badge()
 	_story_tick()
+	_delivery_tick()
 
 
 func _accept_order(o: Dictionary) -> void:
@@ -1535,16 +1616,14 @@ func _place_waiting_orders() -> void:
 func _job_complete(id: String) -> void:
 	jobs[id]["done"] = true
 	var o: Dictionary = jobs[id]["order"]
-	o["status"] = "ready"
-	_toast(T("Pronto! Liguei a %s — vem buscar ao balcão.") % o["customer"], false, GREEN)
+	o["status"] = "done"
+	_toast(T("Reparado! Pega no equipamento (E) e leva-o à prateleira «Prontos a entregar»."), false, GREEN)
 	_exit_inspect_forced()
-	get_tree().create_timer(1.2).timeout.connect(func() -> void: _spawn_customer(o, "pickup"))
 	_refresh_objective()
 
 
-## Payment summary for a finished job (shown when the customer picks it up).
-func _job_payment(id: String) -> Dictionary:
-	var o: Dictionary = jobs[id]["order"]
+## Payment summary for a finished order (when the customer picks it up).
+func _order_payment(o: Dictionary) -> Dictionary:
 	var on_time := _abs_minutes() <= float(o["deadline"])
 	var tip_mult := (1.1 if upgrades.has("coffee") else 1.0) * (1.1 if upgrades.has("speaker") else 1.0)
 	var tip := snappedf(float(o["pay"]) * (randf_range(0.1, 0.25) if on_time else 0.0) * tip_mult, 1.0)
@@ -1554,44 +1633,162 @@ func _job_payment(id: String) -> Dictionary:
 	return {"tip": tip, "stars": stars}
 
 
-func _deliver(id: String, tip: float, stars: int) -> void:
+## Picks the finished device up from the bench (frees the bench spot).
+func _pick_device(id: String) -> void:
+	if not carrying.is_empty():
+		_toast(T("Já tens as mãos ocupadas."), true)
+		return
 	var o: Dictionary = jobs[id]["order"]
-	var f := _fault(id)
+	var d: Node3D = devices[id]
+	d.set_pickable(false)
+	d.set_device_highlight(false)
+	hovered_pick = ""
+	devices.erase(id)
+	jobs.erase(id)
+	d.queue_free()
+	o["status"] = "carried"
+	_start_carry(o)
+	_sfx("pickup")
+	_toast(T("Leva-o à prateleira «Prontos a entregar» (junto à parede esquerda)."))
+	_place_waiting_orders()
+	_refresh_objective()
+
+
+func _start_carry(o: Dictionary) -> void:
+	carrying = {"order": o}
+	if carry_node and is_instance_valid(carry_node):
+		carry_node.queue_free()
+	carry_node = Node3D.new()
+	cam.add_child(carry_node)
+	var st := _device_standin(str(o["device"]))
+	carry_node.add_child(st)
+	carry_node.position = Vector3(0.0, -0.24, -0.5)
+	carry_node.rotation_degrees = Vector3(10, 0, 0)
+	_equip("none")
+
+
+func _end_carry() -> void:
+	carrying = {}
+	if carry_node and is_instance_valid(carry_node):
+		carry_node.queue_free()
+	carry_node = null
+
+
+func _build_shelf_targets() -> void:
+	for b in shelf_bodies:
+		if is_instance_valid(b):
+			b.queue_free()
+	shelf_bodies.clear()
+	for i in range(room.pickup_slots.size()):
+		var b := Kit.static_body(self, Kit.box_shape(Vector3(0.42, 0.34, 0.38)), room.pickup_slots[i] + Vector3(0, 0.17, 0), "shelf:%d" % i)
+		b.collision_layer = 1
+		shelf_bodies.append(b)
+
+
+func _shelf_place(i: int) -> void:
+	var o: Dictionary = carrying["order"]
+	var node := _device_standin(str(o["device"]))
+	add_child(node)
+	node.global_position = room.pickup_slots[i] + Vector3(0, 0.04, 0)
+	node.rotation_degrees = Vector3(0, 90, 0)
+	var tag := Label3D.new()
+	tag.text = "#%d  %s" % [int(o["number"]), str(o["customer"])]
+	tag.font_size = 32
+	tag.pixel_size = 0.0009
+	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	tag.position = Vector3(0, 0.12, 0)
+	tag.outline_size = 6
+	node.add_child(tag)
+	shelf_items[i] = {"order": o, "node": node}
+	o["status"] = "shelf"
+	o["shelf"] = i + 1
+	_end_carry()
+	_sfx("part", 0.7)
+	_toast(T("Pedido #%d pronto na prateleira. %s foi avisado.") % [int(o["number"]), o["customer"]], false, GREEN)
+	if not customers.has(int(o["id"])):
+		get_tree().create_timer(randf_range(3.0, 6.0)).timeout.connect(func() -> void:
+			if o["status"] in ["shelf", "carried"]:
+				_spawn_customer(o, "pickup"))
+	_refresh_objective()
+
+
+func _shelf_take(i: int) -> void:
+	var item: Dictionary = shelf_items[i]
+	var o: Dictionary = item["order"]
+	(item["node"] as Node3D).queue_free()
+	shelf_items[i] = null
+	o["status"] = "carried"
+	_start_carry(o)
+	_sfx("pickup")
+
+
+## Customer received their device: stats now, money goes on the counter.
+func _finish_order(o: Dictionary, tip: float, stars: int) -> void:
+	var f: Dictionary = FAULTS[o["fault"]]
 	var gain := float(o["pay"]) + tip
-	_sfx("cash")
-	money += gain
-	day_profit += gain
 	repaired += 1
 	story_deliveries += 1
 	ratings.append(stars)
 	if ratings.size() > 30:
 		ratings.pop_front()
 	_gain_xp(int(f["xp"]))
-	if mode == "inspect":
-		_exit_inspect_forced()
 	orders.erase(o)
-	jobs.erase(id)
-	var d: Node3D = devices[id]
-	d.set_pickable(false)
-	d.set_device_highlight(false)
-	hovered_pick = ""
-	devices.erase(id)
-	var tw := create_tween()
-	tw.tween_property(d, "scale", Vector3(0.01, 0.01, 0.01), 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-	tw.tween_callback(func() -> void:
-		d.queue_free()
-		_place_waiting_orders()
-		_refresh_objective())
+	_end_carry()
 	var c: Node3D = customers.get(int(o["id"]))
 	if c:
-		c.hold(_device_standin(id))
+		c.hold(_device_standin(str(o["device"])))
 		c.set_mood("happy")
+	if gain > 0.0:
+		_spawn_cash(gain, c.global_position if c else Vector3(0.6, 0, 2.0))
 	_customer_leave(int(o["id"]), "happy")
 	next_order_at = minf(next_order_at, _abs_minutes() + 12.0)
-	if gain > 0.0:
-		_toast(T("+%s  %s ficou muito contente!") % [_eur(gain), o["customer"]], false, GREEN)
 	_save_game()
 	_story_check()
+	_refresh_objective()
+
+
+func _spawn_cash(amount: float, near: Vector3) -> void:
+	var n := Node3D.new()
+	add_child(n)
+	var x := clampf(near.x, -0.3, 1.0)
+	n.global_position = Vector3(x + cash_items.size() * 0.12, Room.COUNTER_TOP, Room.COUNTER_Z + 0.12)
+	var note := Kit.fabric(Color("7fb77e"), 0.9, 0.3, 60.0)
+	for i in range(int(clampf(amount / 25.0, 2, 8))):
+		var b := Kit.box(n, Vector3(0.14, 0.0015, 0.07), note, Vector3(randf_range(-0.01, 0.01), 0.001 + i * 0.0016, randf_range(-0.01, 0.01)))
+		b.rotation_degrees.y = randf_range(-12, 12)
+	for i in range(3):
+		Kit.cyl(n, 0.012, 0.003, Kit.chrome(Color("e6c56a")), Vector3(0.09 + i * 0.012, 0.0015 + i * 0.003, 0.03))
+	var l := Label3D.new()
+	l.text = _eur(amount)
+	l.font_size = 40
+	l.pixel_size = 0.001
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.modulate = Color("2ecc71")
+	l.outline_size = 8
+	l.position = Vector3(0, 0.07, 0)
+	n.add_child(l)
+	var body := Kit.static_body(n, Kit.box_shape(Vector3(0.2, 0.08, 0.14)), Vector3(0, 0.03, 0), "cash")
+	body.collision_layer = 1
+	var item := {"amount": amount, "node": n, "body": body}
+	body.set_meta("cash", item)
+	cash_items.append(item)
+	_toast(T("O cliente deixou o dinheiro no balcão. Guarda-o na caixa (E)."), false, YELLOW)
+
+
+func _collect_cash(item: Dictionary) -> void:
+	cash_items.erase(item)
+	var n: Node3D = item["node"]
+	(item["body"] as StaticBody3D).collision_layer = 0
+	money += float(item["amount"])
+	day_profit += float(item["amount"])
+	var t := create_tween()
+	t.tween_property(n, "global_position", room.register.global_position + Vector3(0, 0.15, 0), 0.35)
+	t.parallel().tween_property(n, "scale", Vector3(0.3, 0.3, 0.3), 0.35)
+	t.tween_callback(n.queue_free)
+	room.ring_register(_eur(float(item["amount"])))
+	_sfx("cash")
+	_toast(T("+%s na caixa registadora!") % _eur(float(item["amount"])), false, GREEN)
+	_save_game()
 
 
 func _exit_inspect_forced() -> void:
@@ -1751,15 +1948,21 @@ func _talk_to_customer(c: Node3D) -> void:
 				after.call())
 		return
 	if purpose == "pickup":
-		var id := str(o["device"])
-		if not jobs.has(id):
+		var story_key := str(o.get("story", ""))
+		var holding_it: bool = not carrying.is_empty() and carrying["order"] == o
+		if not holding_it:
+			var where := ""
+			if o.get("status", "") == "shelf":
+				where = "\n" + T("(Está na prateleira «Prontos a entregar», lugar #%d.)") % int(o.get("shelf", 0))
+			var wrong := ""
+			if not carrying.is_empty():
+				wrong = T("Hmm, isso não é meu.") + " "
+			_open_dialog([[str(o["customer"]), o["color"], wrong + T("Olá! Venho buscar o pedido #%d — %s.") % [int(o["number"]), _dev_name(str(o["device"]))] + where]], [[T("Vou buscar!"), _close_dialog]])
 			return
-		var pay := _job_payment(id)
+		var pay := _order_payment(o)
 		var stars: int = pay["stars"]
 		var tip: float = pay["tip"]
 		var star_txt := "★".repeat(stars) + "☆".repeat(5 - stars)
-		var lines: Array = []
-		var story_key := str(o.get("story", ""))
 		var after_scene := ""
 		if story_key != "":
 			after_scene = Story.STORY_ORDERS[story_key]["deliver"]
@@ -1767,10 +1970,9 @@ func _talk_to_customer(c: Node3D) -> void:
 		if tip > 0:
 			text += "     " + T("Gorjeta:  %s") % _eur(tip)
 		text += "\n" + T("Avaliação:  %s") % star_txt
-		lines = [[str(o["customer"]), o["color"], text]]
-		_open_dialog(lines, [[T("Entregar a %s") % o["customer"], func() -> void:
+		_open_dialog([[str(o["customer"]), o["color"], text]], [[T("Entregar a %s") % o["customer"], func() -> void:
 			_close_dialog()
-			_deliver(id, tip, stars)
+			_finish_order(o, tip, stars)
 			if after_scene != "":
 				get_tree().create_timer(0.3).timeout.connect(func() -> void: _play_scene(after_scene, func() -> void: _story_after_delivery(story_key)))
 		]])
@@ -2053,7 +2255,15 @@ func _save_game() -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		return
-	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inventory,
+	var pending_cash := 0.0
+	for c in cash_items:
+		pending_cash += float(c["amount"])
+	var inv_save := inventory.duplicate()
+	for d in deliveries:
+		inv_save[d["key"]] = int(inv_save.get(d["key"], 0)) + 1
+	for pc in parcels:
+		inv_save[pc["key"]] = int(inv_save.get(pc["key"], 0)) + 1
+	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money + pending_cash, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inv_save,
 		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount, "upgrades": upgrades}))
 
 
@@ -2869,7 +3079,7 @@ func _fill_orders() -> void:
 	if orders.is_empty():
 		board_box.add_child(_label(T("Ainda não há clientes. Vão chegando ao longo do dia."), 18, MUTED))
 		return
-	var status_txt := {"new": [T("NOVO PEDIDO"), YELLOW], "accepted": [T("NA FILA"), Color("7fb3ff")], "repair": [T("NA BANCADA"), GREEN], "ready": [T("PRONTO — NO BALCÃO"), GREEN]}
+	var status_txt := {"new": [T("NOVO PEDIDO"), YELLOW], "accepted": [T("NA FILA"), Color("7fb3ff")], "repair": [T("NA BANCADA"), GREEN], "ready": [T("PRONTO — NO BALCÃO"), GREEN], "done": [T("REPARADO — NA BANCADA"), GREEN], "carried": [T("NAS TUAS MÃOS"), GREEN], "shelf": [T("NA PRATELEIRA"), GREEN]}
 	for o in orders:
 		var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(14, 12, 14, 12))
 		card.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -2921,7 +3131,20 @@ func _fill_orders() -> void:
 
 
 func _fill_shop() -> void:
-	board_box.add_child(_label(T("Entrega expresso: as peças chegam de imediato à prateleira."), 15, MUTED))
+	board_box.add_child(_label(T("As encomendas demoram uns minutos e chegam à receção, junto à porta."), 15, MUTED))
+	var chips := HFlowContainer.new()
+	chips.add_theme_constant_override("h_separation", 6)
+	chips.add_theme_constant_override("v_separation", 6)
+	board_box.add_child(chips)
+	var filters := ["all", "laptop", "phone", "gamepad", "console", "handheld", "rotary", "radio"]
+	for fkey in filters:
+		var b := _small_button(T("Todos") if fkey == "all" else _dev_name(fkey), fkey == shop_filter)
+		b.custom_minimum_size = Vector2(0, 32)
+		var fk: String = fkey
+		b.pressed.connect(func() -> void:
+			shop_filter = fk
+			_refresh_board())
+		chips.add_child(b)
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 10)
@@ -2929,21 +3152,44 @@ func _fill_shop() -> void:
 	board_box.add_child(grid)
 	for key in Data.PARTS.keys():
 		var pinfo: Dictionary = Data.PARTS[key]
-		var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(14, 10, 14, 10))
+		if shop_filter != "all" and pinfo["device"] != shop_filter:
+			continue
+		var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(10, 8, 12, 8))
 		card.mouse_filter = Control.MOUSE_FILTER_PASS
 		card.custom_minimum_size = Vector2(355, 0)
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 10)
 		card.add_child(h)
+		var icon_bg := PanelContainer.new()
+		var isb := StyleBoxFlat.new()
+		isb.bg_color = Color(1, 1, 1, 0.06)
+		isb.set_corner_radius_all(10)
+		icon_bg.add_theme_stylebox_override("panel", isb)
+		var tr := TextureRect.new()
+		tr.texture = _part_icon(key)
+		tr.custom_minimum_size = Vector2(72, 72)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_bg.add_child(tr)
+		h.add_child(icon_bg)
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_child(_label(T(str(pinfo["name"])), 17, TEXT, font_xbold))
-		info.add_child(_label(T("%s   •   Em stock: %d") % [_eur(float(pinfo["price"])), int(inventory.get(key, 0))], 14, MUTED))
+		info.add_child(_label(T(str(pinfo["name"])), 16, TEXT, font_xbold))
+		info.add_child(_label(_dev_name(str(pinfo["device"])), 13, Color("8fd8ff")))
+		var transit := 0
+		for dl in deliveries:
+			if dl["key"] == key:
+				transit += 1
+		var stock_txt := T("%s   •   Em stock: %d") % [_eur(float(pinfo["price"])), int(inventory.get(key, 0))]
+		if transit > 0:
+			stock_txt += "  (+%d %s)" % [transit, T("a caminho")]
+		info.add_child(_label(stock_txt, 13, MUTED))
 		h.add_child(info)
 		var buy := _small_button(T("Comprar"), true)
 		var k: String = key
 		buy.disabled = money < float(pinfo["price"])
 		buy.pressed.connect(func() -> void: _buy_part(k))
+		buy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		h.add_child(buy)
 		grid.add_child(card)
 
@@ -3005,10 +3251,175 @@ func _buy_part(key: String) -> void:
 		return
 	money -= price
 	day_profit -= price
-	inventory[key] = int(inventory.get(key, 0)) + 1
+	var eta := randf_range(15.0, 30.0)
+	deliveries.append({"key": key, "arrive": _abs_minutes() + eta})
 	_sfx("cash", 0.5)
-	_toast(T("Comprado: %s (-%s)") % [T(Data.PARTS[key]["name"]), _eur(price)], false, GREEN)
+	_toast(T("Encomenda feita: %s. Chega à receção dentro de ~%d min.") % [T(Data.PARTS[key]["name"]), int(eta)], false, GREEN)
 	_refresh_board()
+
+
+func _delivery_tick() -> void:
+	var now := _abs_minutes()
+	for d in deliveries.duplicate():
+		if now >= float(d["arrive"]):
+			var slot := _free_receive_slot()
+			if slot < 0:
+				return
+			deliveries.erase(d)
+			_spawn_parcel(str(d["key"]), slot)
+
+
+func _free_receive_slot() -> int:
+	var used: Array = []
+	for pc in parcels:
+		used.append(pc["slot"])
+	for i in range(room.receive_slots.size()):
+		if not used.has(i):
+			return i
+	return -1
+
+
+func _spawn_parcel(key: String, slot: int) -> void:
+	var n := room.make_parcel(T(Data.PARTS[key]["name"]))
+	add_child(n)
+	n.global_position = room.receive_slots[slot]
+	n.rotation_degrees.y = -90 + randf_range(-8, 8)
+	n.scale = Vector3(0.01, 0.01, 0.01)
+	create_tween().tween_property(n, "scale", Vector3.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var body := Kit.static_body(n, Kit.box_shape(Vector3(0.28, 0.18, 0.22)), Vector3(0, 0.08, 0), "parcel")
+	body.collision_layer = 1
+	var item := {"key": key, "node": n, "body": body, "slot": slot}
+	body.set_meta("parcel", item)
+	parcels.append(item)
+	_sfx("door_chime", 0.5)
+	_toast(T("Chegou uma encomenda à receção (junto à porta)!"), false, YELLOW)
+
+
+func _open_parcel(item: Dictionary) -> void:
+	parcels.erase(item)
+	var key: String = item["key"]
+	inventory[key] = int(inventory.get(key, 0)) + 1
+	var n: Node3D = item["node"]
+	(item["body"] as StaticBody3D).collision_layer = 0
+	var t := create_tween()
+	t.tween_property(n, "scale", Vector3(0.01, 0.01, 0.01), 0.3)
+	t.tween_callback(n.queue_free)
+	_sfx("part", 0.7)
+	_toast(T("%s guardado no stock.") % T(Data.PARTS[key]["name"]), false, GREEN)
+	if mode == "inspect":
+		_activate_step_targets()
+
+
+func _clear_world_items() -> void:
+	for pc in parcels:
+		if is_instance_valid(pc["node"]):
+			pc["node"].queue_free()
+	parcels.clear()
+	deliveries.clear()
+	for c in cash_items:
+		if is_instance_valid(c["node"]):
+			c["node"].queue_free()
+	cash_items.clear()
+	for i in range(shelf_items.size()):
+		if shelf_items[i] != null and is_instance_valid(shelf_items[i]["node"]):
+			shelf_items[i]["node"].queue_free()
+		shelf_items[i] = null
+	_end_carry()
+
+
+## 3D thumbnail of a spare part for the shop (rendered once, cached).
+func _part_icon(key: String) -> Texture2D:
+	if part_icons.has(key):
+		return part_icons[key]
+	var vp := SubViewport.new()
+	vp.size = Vector2i(160, 160)
+	vp.transparent_bg = true
+	vp.own_world_3d = true
+	vp.msaa_3d = Viewport.MSAA_4X
+	add_child(vp)
+	var root3d := Node3D.new()
+	vp.add_child(root3d)
+	var we := WorldEnvironment.new()
+	var e := Environment.new()
+	e.background_mode = Environment.BG_CLEAR_COLOR
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	e.ambient_light_color = Color("c8d4e6")
+	e.ambient_light_energy = 0.8
+	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	we.environment = e
+	root3d.add_child(we)
+	var key_l := DirectionalLight3D.new()
+	key_l.rotation_degrees = Vector3(-50, -30, 0)
+	key_l.light_energy = 1.6
+	root3d.add_child(key_l)
+	var model := _part_model(key)
+	root3d.add_child(model)
+	var aabb := AABB()
+	var first := true
+	for m in _meshes_in(model):
+		var mi: MeshInstance3D = m
+		if mi.mesh == null:
+			continue
+		var box: AABB = mi.global_transform * mi.mesh.get_aabb()
+		aabb = box if first else aabb.merge(box)
+		first = false
+	var center := aabb.get_center()
+	var size := maxf(aabb.size.x, maxf(aabb.size.y, aabb.size.z))
+	var c := Camera3D.new()
+	c.projection = Camera3D.PROJECTION_ORTHOGONAL
+	c.size = maxf(0.02, size * 1.25)
+	root3d.add_child(c)
+	c.look_at_from_position(center + Vector3(0.25, 0.85, 0.55).normalized() * (size * 3.0 + 0.1), center, Vector3.UP)
+	part_icons[key] = vp.get_texture()
+	_freeze_viewport_later(vp)
+	return part_icons[key]
+
+
+func _meshes_in(n: Node) -> Array:
+	var out: Array = []
+	if n is MeshInstance3D:
+		out.append(n)
+	for ch in n.get_children():
+		out.append_array(_meshes_in(ch))
+	return out
+
+
+func _part_model(key: String) -> Node3D:
+	var dev: String = Data.PARTS[key]["device"]
+	var d: Node3D
+	match dev:
+		"laptop":
+			d = Laptop.new()
+		"phone":
+			d = Phone.new()
+		"console":
+			d = ConsoleDev.new()
+		"handheld":
+			d = HandheldDev.new()
+		"rotary":
+			d = RotaryDev.new()
+		"radio":
+			d = RadioDev.new()
+		_:
+			d = Gamepad.new()
+	var node: Node3D
+	if key == "battery":
+		node = d._battery_model(false)
+	elif key == "phone_screen":
+		node = d._build_screen_assembly(false)
+	else:
+		node = d.parts[key]["node"]
+		node.get_parent().remove_child(node)
+	d.free()
+	var holder := Node3D.new()
+	holder.add_child(node)
+	node.transform = Transform3D.IDENTITY
+	if key in ["battery", "laptop_fan", "ssd", "joystick", "console_fan", "disc_drive", "handheld_battery"]:
+		node.rotation = Vector3(0, 0, PI)
+	var dust := node.get_node_or_null("Dust")
+	if dust:
+		dust.visible = false
+	return holder
 
 
 func _small_button(text: String, primary: bool) -> Button:
@@ -3377,6 +3788,7 @@ func _new_game() -> void:
 	_apply_upgrades()
 	_reset_jobs()
 	_clear_customers()
+	_clear_world_items()
 	orders.clear()
 	_save_game()
 	_start_game(true)

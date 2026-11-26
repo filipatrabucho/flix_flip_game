@@ -29,6 +29,8 @@ var door_sign: Label3D
 var register: Node3D
 var register_drawer: Node3D
 var register_screen: Label3D
+var receive_shelf: Node3D
+var pickup_shelf: Node3D
 var tablet_label: Label3D
 var rng := RandomNumberGenerator.new()
 
@@ -53,6 +55,8 @@ func build(parent: Node3D) -> Node3D:
 	_floor_props()
 	_counter()
 	_door()
+	_receiving()
+	_pickup_shelf()
 	return root
 
 
@@ -803,6 +807,10 @@ func relabel() -> void:
 		door_sign.text = I18n.t("ABERTO")
 	if tablet_label:
 		tablet_label.text = I18n.t("PEDIDOS  [P]")
+	if receive_shelf:
+		(receive_shelf.get_meta("sign") as Label3D).text = I18n.t("RECEÇÃO")
+	if pickup_shelf:
+		(pickup_shelf.get_meta("sign") as Label3D).text = I18n.t("PRONTOS A ENTREGAR")
 
 
 # -----------------------------------------------------------------------------
@@ -908,3 +916,97 @@ func ring_register(amount_text: String) -> void:
 		t.tween_property(register_drawer, "position:z", 0.25, 0.15)
 		t.tween_interval(0.6)
 		t.tween_property(register_drawer, "position:z", 0.15, 0.25)
+
+
+# -----------------------------------------------------------------------------
+# Receiving shelf (parcels from the parts shop) and pickup shelf (repaired devices)
+# -----------------------------------------------------------------------------
+const RECEIVE_POS := Vector3(2.38, 0.0, 0.75)
+const PICKUP_POS := Vector3(-2.38, 0.0, 1.3)
+var receive_slots: Array[Vector3] = []
+var pickup_slots: Array[Vector3] = []
+
+
+func _shelf_unit(pos: Vector3, yaw: float, width: float, levels: Array, sign_text: String, sign_color: Color) -> Node3D:
+	var n := Node3D.new()
+	n.position = pos
+	n.rotation_degrees.y = yaw
+	root.add_child(n)
+	var steel := Kit.mat(Color("38414b"), 0.45, 0.75)
+	var wood := Kit.pbr("walnut_pbr", 0.6, 0.0, Color("b07a4e"), Vector3(2, 2, 2), true)
+	for x in [-width * 0.5, width * 0.5]:
+		for dz in [-0.17, 0.17]:
+			Kit.box(n, Vector3(0.03, 1.5, 0.03), steel, Vector3(x, 0.75, dz))
+	for y in levels:
+		Kit.box(n, Vector3(width + 0.04, 0.025, 0.4), wood, Vector3(0, y, 0))
+	var l := Label3D.new()
+	l.text = sign_text
+	l.font_size = 64
+	l.pixel_size = 0.0011
+	l.modulate = sign_color
+	l.outline_size = 10
+	l.shaded = false
+	l.position = Vector3(0, 1.62, 0.0)
+	var f := load("res://assets/fonts/Nunito-ExtraBold.ttf")
+	if f:
+		l.font = f
+	n.add_child(l)
+	n.set_meta("sign", l)
+	return n
+
+
+func _receiving() -> void:
+	var n := _shelf_unit(RECEIVE_POS, -90.0, 0.9, [0.45, 0.95], I18n.t("RECEÇÃO"), Color("f5b82e"))
+	receive_shelf = n
+	for y in [0.95, 0.45]:
+		for i in range(3):
+			receive_slots.append(n.global_transform * Vector3(-0.3 + i * 0.3, y + 0.0125, 0.0))
+	var lamp := OmniLight3D.new()
+	lamp.position = RECEIVE_POS + Vector3(-0.6, 1.9, 0)
+	lamp.light_color = Color("ffe6c4")
+	lamp.light_energy = 0.9
+	lamp.omni_range = 2.2
+	root.add_child(lamp)
+
+
+func _pickup_shelf() -> void:
+	var n := _shelf_unit(PICKUP_POS, 90.0, 1.0, [0.55, 1.05], I18n.t("PRONTOS A ENTREGAR"), Color("2ecc71"))
+	pickup_shelf = n
+	var i := 0
+	for y in [1.05, 0.55]:
+		for k in range(2):
+			var p := n.global_transform * Vector3(-0.25 + k * 0.5, y + 0.0125, 0.0)
+			pickup_slots.append(p)
+			i += 1
+			var tag := Label3D.new()
+			tag.text = "#%d" % i
+			tag.font_size = 56
+			tag.pixel_size = 0.0012
+			tag.modulate = Color("f2f5f8")
+			tag.outline_size = 8
+			tag.shaded = false
+			tag.position = Vector3(-0.25 + k * 0.5, y - 0.04, 0.21)
+			n.add_child(tag)
+	var lamp := OmniLight3D.new()
+	lamp.position = PICKUP_POS + Vector3(0.6, 1.9, 0)
+	lamp.light_color = Color("ffe6c4")
+	lamp.light_energy = 0.9
+	lamp.omni_range = 2.2
+	root.add_child(lamp)
+
+
+func make_parcel(label_text: String) -> Node3D:
+	var n := Node3D.new()
+	var card := Kit.plastic(Color("c49a62"), 0.9, 0.3)
+	Kit.slab(n, Vector3(0.26, 0.16, 0.2), 0.006, 0.004, card, null, null, Vector3(0, 0.08, 0))
+	Kit.box(n, Vector3(0.262, 0.004, 0.05), Kit.plastic(Color("d9b98c"), 0.4), Vector3(0, 0.161, 0))
+	Kit.box(n, Vector3(0.1, 0.002, 0.07), Kit.mat(Color("f4f6f8"), 0.6), Vector3(0.05, 0.162, 0.04))
+	var l := Label3D.new()
+	l.text = label_text
+	l.font_size = 30
+	l.pixel_size = 0.0009
+	l.modulate = Color("2d3436")
+	l.outline_size = 0
+	l.position = Vector3(0, 0.08, 0.101)
+	n.add_child(l)
+	return n
