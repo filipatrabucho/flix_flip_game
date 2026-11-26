@@ -118,46 +118,47 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	torso.position = Vector3(0, 0.0, 0)
 	hips.add_child(torso)
 	Kit.lathe(torso, [Vector3(-0.1, 0.12 * hipw, 0.085), Vector3(-0.06, 0.16 * hipw, 0.105), Vector3(0.0, 0.168 * hipw, 0.11), Vector3(0.08, 0.158, 0.105)], pants, Vector3.ZERO, Vector3.ZERO, 24)
-	Kit.lathe(torso, [Vector3(0.05, 0.16, 0.108), Vector3(0.14, 0.148, 0.102), Vector3(0.24, 0.156, 0.108), Vector3(0.35, 0.176 * wide, 0.118), Vector3(0.45, 0.19 * wide, 0.12), Vector3(0.52, 0.18 * wide, 0.11), Vector3(0.565, 0.13 * wide, 0.085), Vector3(0.59, 0.055, 0.05)], shirt, Vector3.ZERO, Vector3.ZERO, 28)
-	Kit.box(torso, Vector3(0.33 * hipw, 0.035, 0.225), Kit.mat(Color("2a211b"), 0.4, 0.2), Vector3(0, 0.065, 0))
-	Kit.box(torso, Vector3(0.05, 0.03, 0.01), Kit.chrome(Color("c9b27a")), Vector3(0, 0.065, 0.112))
+	Kit.lathe(torso, [Vector3(0.05, 0.165, 0.115), Vector3(0.14, 0.158, 0.112), Vector3(0.24, 0.165, 0.118), Vector3(0.35, 0.18 * wide, 0.124), Vector3(0.44, 0.188 * wide, 0.124), Vector3(0.51, 0.172 * wide, 0.112), Vector3(0.555, 0.135 * wide, 0.09), Vector3(0.585, 0.07, 0.058), Vector3(0.595, 0.05, 0.048)], shirt, Vector3.ZERO, Vector3.ZERO, 28)
+	# rounded belt
+	var belt := Kit.torus(torso, 0.148 * hipw, 0.168 * hipw, Kit.mat(Color("2a211b"), 0.45, 0.2), Vector3(0, 0.065, 0))
+	belt.scale = Vector3(1.0, 1.0, 0.68)
+	Kit.slab(torso, Vector3(0.045, 0.01, 0.03), 0.008, 0.003, Kit.chrome(Color("d9c27a")), null, null, Vector3(0, 0.065, 0.116), Vector3(90, 0, 0))
 	match outfit:
 		0:
-			# collared shirt with buttons and a breast pocket
-			Kit.torus(torso, 0.043, 0.06, shirt, Vector3(0, 0.585, 0.0)).scale = Vector3(1.1, 0.6, 1.0)
+			# shirt: soft rounded collar points, buttons, rounded pocket
+			Kit.torus(torso, 0.046, 0.064, shirt, Vector3(0, 0.583, 0.0)).scale = Vector3(1.1, 0.7, 1.0)
 			for side in [-1.0, 1.0]:
-				var col := Kit.box(torso, Vector3(0.06, 0.006, 0.04), shirt, Vector3(side * 0.03, 0.575, 0.06), Vector3(30, side * 25.0, 0))
-				col.rotation_degrees.z = side * -20.0
+				var col := Kit.sphere(torso, 0.03, shirt, Vector3(side * 0.03, 0.565, 0.072), Vector3(1.0, 0.45, 0.25))
+				col.rotation_degrees = Vector3(-25, side * 20.0, side * -35.0)
 			for i in range(4):
-				Kit.cyl(torso, 0.0055, 0.004, Kit.mat(shirt_c.darkened(0.45), 0.4), Vector3(0, 0.5 - i * 0.1, 0.121 - i * 0.002), Vector3(90, 0, 0))
-			Kit.box(torso, Vector3(0.002, 0.42, 0.003), Kit.mat(shirt_c.darkened(0.2), 0.8), Vector3(0, 0.33, 0.121))
-			Kit.box(torso, Vector3(0.06, 0.07, 0.004), Kit.fabric(shirt_c.darkened(0.08), 0.9), Vector3(-0.07, 0.44, 0.118))
+				Kit.sphere(torso, 0.0062, Kit.mat(shirt_c.darkened(0.45), 0.4), Vector3(0, 0.5 - i * 0.1, 0.118 - i * 0.002), Vector3(1, 1, 0.5))
+			Kit.slab(torso, Vector3(0.06, 0.006, 0.065), 0.02, 0.003, Kit.mat(shirt_c.darkened(0.08), 0.8), null, null, Vector3(-0.07, 0.44, 0.116), Vector3(90, 0, 0))
 		1:
 			# hoodie: hood behind the neck, kangaroo pocket, drawstrings
 			Kit.torus(torso, 0.05, 0.075, shirt, Vector3(0, 0.575, -0.02)).scale = Vector3(1.15, 0.9, 1.1)
 			Kit.lathe(torso, [Vector3(0.52, 0.09, 0.05), Vector3(0.6, 0.1, 0.06), Vector3(0.68, 0.085, 0.05), Vector3(0.72, 0.0, 0.0)], shirt, Vector3(0, 0, -0.08), Vector3.ZERO, 18)
-			Kit.lathe(torso, [Vector3(0.1, 0.11, 0.03), Vector3(0.22, 0.1, 0.03)], Kit.fabric(shirt_c.darkened(0.1), 0.9), Vector3(0, 0, 0.098), Vector3.ZERO, 16)
+			Kit.lathe(torso, [Vector3(0.1, 0.11, 0.03), Vector3(0.22, 0.1, 0.03)], Kit.mat(shirt_c.darkened(0.1), 0.8), Vector3(0, 0, 0.098), Vector3.ZERO, 16)
 			for side in [-1.0, 1.0]:
 				Kit.cyl(torso, 0.003, 0.14, Kit.mat(Color("f4f6f8"), 0.6), Vector3(side * 0.025, 0.5, 0.118))
-				Kit.sphere(torso, 0.006, Kit.mat(Color("d9dde2"), 0.4), Vector3(side * 0.025, 0.43, 0.12))
-			Kit.cyl(torso, 0.15, 0.04, Kit.fabric(shirt_c.darkened(0.15), 0.9), Vector3(0, 0.08, 0)).scale = Vector3(1.08, 1, 0.75)
+				Kit.sphere(torso, 0.007, Kit.mat(Color("d9dde2"), 0.4), Vector3(side * 0.025, 0.43, 0.12))
+			Kit.torus(torso, 0.14, 0.165, Kit.mat(shirt_c.darkened(0.15), 0.8), Vector3(0, 0.1, 0)).scale = Vector3(1.0, 1.4, 0.7)
 		_:
-			# open jacket over a t-shirt: lapels and a zip line
-			var panel := Kit.slab(torso, Vector3(0.1, 0.006, 0.42), 0.02, 0.002, tee, tee, tee, Vector3(0, 0.33, 0.118), Vector3(-90, 0, 0))
-			panel.rotation_degrees.x = -92.0
+			# zip-up jacket: smooth body, rounded collar, zip with a puller, patch pockets
+			Kit.torus(torso, 0.05, 0.072, shirt, Vector3(0, 0.575, 0.0)).scale = Vector3(1.1, 1.0, 1.05)
+			Kit.torus(torso, 0.042, 0.052, tee, Vector3(0, 0.6, 0.004)).scale = Vector3(1.05, 0.6, 1.0)
+			Kit.capsule(torso, 0.0045, 0.44, Kit.mat(shirt_c.darkened(0.35), 0.5), Vector3(0, 0.34, 0.121))
+			Kit.slab(torso, Vector3(0.016, 0.006, 0.03), 0.005, 0.002, Kit.chrome(Color("c9ced4")), null, null, Vector3(0, 0.5, 0.126), Vector3(90, 0, 0))
 			for side in [-1.0, 1.0]:
-				var lap := Kit.box(torso, Vector3(0.05, 0.3, 0.012), shirt, Vector3(side * 0.07, 0.4, 0.124), Vector3(0, side * -10.0, side * 8.0))
-				lap.name = "Lapel"
-				Kit.box(torso, Vector3(0.05, 0.08, 0.012), Kit.fabric(shirt_c.darkened(0.2), 0.9), Vector3(side * 0.085, 0.53, 0.1), Vector3(-20, 0, side * 25.0))
-				Kit.box(torso, Vector3(0.002, 0.3, 0.004), Kit.chrome(Color("b8bec5")), Vector3(side * 0.045, 0.35, 0.131))
-			Kit.torus(torso, 0.046, 0.058, tee, Vector3(0, 0.58, 0.0)).scale = Vector3(1.1, 0.5, 1.0)
+				var pk := Kit.slab(torso, Vector3(0.075, 0.008, 0.06), 0.022, 0.004, Kit.mat(shirt_c.darkened(0.12), 0.8), null, null, Vector3(side * 0.08, 0.17, 0.112), Vector3(90, 0, 0))
+				pk.rotation_degrees.y = side * -12.0
+			Kit.torus(torso, 0.145, 0.165, Kit.mat(shirt_c.darkened(0.15), 0.8), Vector3(0, 0.12, 0)).scale = Vector3(1.0, 1.2, 0.72)
 	Kit.lathe(torso, [Vector3(0.55, 0.056, 0.058), Vector3(0.6, 0.052, 0.054), Vector3(0.66, 0.05, 0.052)], skin, Vector3.ZERO, Vector3.ZERO, 16)
 	# --- arms: shoulder -> elbow -> forearm -> hand
 	for side in [-1.0, 1.0]:
 		var arm := Node3D.new()
 		arm.position = Vector3(side * 0.172 * wide, 0.5, 0)
 		torso.add_child(arm)
-		Kit.sphere(arm, 0.054, shirt, Vector3(0, -0.005, 0), Vector3(1.0, 0.95, 1.0))
+		Kit.sphere(arm, 0.06, shirt, Vector3(side * -0.006, -0.008, 0), Vector3(1.0, 0.95, 1.0))
 		Kit.lathe(arm, [Vector3(-0.3, 0.036, 0.039), Vector3(-0.2, 0.042, 0.046), Vector3(-0.08, 0.05, 0.052), Vector3(0.0, 0.053, 0.053), Vector3(0.035, 0.04, 0.04), Vector3(0.055, 0.0, 0.0)], shirt, Vector3.ZERO, Vector3.ZERO, 16)
 		var elbow := Node3D.new()
 		elbow.name = "Elbow"
@@ -166,7 +167,9 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 		Kit.sphere(elbow, 0.037, shirt if long_sleeves else skin, Vector3.ZERO)
 		Kit.lathe(elbow, [Vector3(-0.26, 0.025, 0.03), Vector3(-0.18, 0.031, 0.036), Vector3(-0.08, 0.037, 0.042), Vector3(0.0, 0.036, 0.04)], shirt if long_sleeves else skin, Vector3.ZERO, Vector3.ZERO, 16)
 		if long_sleeves:
-			Kit.cyl(elbow, 0.031, 0.02, shirt, Vector3(0, -0.25, 0))
+			Kit.torus(elbow, 0.026, 0.036, Kit.mat(shirt_c.darkened(0.12), 0.8), Vector3(0, -0.25, 0))
+		else:
+			Kit.torus(elbow, 0.028, 0.04, shirt, Vector3(0, 0.0, 0))
 		_hand(elbow, Vector3(0, -0.27, 0), skin, side)
 		arm.rotation.z = side * 0.06
 		if side < 0:
@@ -270,7 +273,12 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 		Kit.slab(torso, Vector3(0.09, 0.26, 0.2), 0.02, 0.01, leather, null, null, Vector3(0.2, 0.08, 0.0), Vector3(0, 0, 90))
 		Kit.box(torso, Vector3(0.05, 0.06, 0.003), Kit.mat(Color("f5b82e"), 0.4), Vector3(0.12, 0.38, 0.122))
 	if "apron" in extras:
-		Kit.lathe(torso, [Vector3(-0.15, 0.17, 0.125), Vector3(0.1, 0.165, 0.118), Vector3(0.3, 0.17, 0.125)], Kit.fabric(Color("5b8a3c"), 0.9), Vector3(0, 0, 0.004), Vector3.ZERO, 24)
+		var apron := Kit.mat(Color("5b8a3c"), 0.85)
+		var ap := Kit.slab(torso, Vector3(0.24, 0.012, 0.52), 0.06, 0.005, apron, null, null, Vector3(0, 0.2, 0.13), Vector3(90, 0, 0))
+		ap.rotation_degrees.x = 88.0
+		Kit.slab(torso, Vector3(0.12, 0.008, 0.07), 0.02, 0.003, Kit.mat(Color("4a7230"), 0.85), null, null, Vector3(0, 0.12, 0.138), Vector3(90, 0, 0))
+		for side in [-1.0, 1.0]:
+			Kit.capsule(torso, 0.006, 0.2, apron, Vector3(side * 0.09, 0.5, 0.1), Vector3(-20, 0, side * 12.0))
 	# carried item holder (in front of the belly)
 	carry = Node3D.new()
 	carry.position = Vector3(0, 0.22, 0.24)

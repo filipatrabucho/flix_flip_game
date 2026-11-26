@@ -943,15 +943,16 @@ func add_upgrade(id: String) -> void:
 			Kit.box(n, Vector3(0.08, 0.005, 0.004), Kit.emissive(Color("3aa8ff"), 3.0), Vector3(0.0, 0.03, 0.058))
 		"display":
 			# glass display cabinet next to the door with repaired gadgets
-			n.position = Vector3(-1.9, 0, 2.15)
+			n.position = Vector3(-2.36, 0, 2.2)
+			n.rotation_degrees.y = 90.0
 			var frame := Kit.mat(Color("1d2a38"), 0.4, 0.5)
-			Kit.box(n, Vector3(0.9, 0.8, 0.45), frame, Vector3(0, 0.4, 0))
-			Kit.box(n, Vector3(0.86, 0.9, 0.41), Kit.glass(Color(0.85, 0.92, 1.0), 0.03, 0.15), Vector3(0, 1.25, 0))
+			Kit.box(n, Vector3(0.7, 0.8, 0.42), frame, Vector3(0, 0.4, 0))
+			Kit.box(n, Vector3(0.66, 0.9, 0.38), Kit.glass(Color(0.85, 0.92, 1.0), 0.03, 0.15), Vector3(0, 1.25, 0))
 			for y in [0.82, 1.2, 1.6]:
-				Kit.box(n, Vector3(0.86, 0.012, 0.41), Kit.glass(Color(0.9, 0.95, 1.0), 0.03, 0.3), Vector3(0, y, 0))
-			Kit.box(n, Vector3(0.9, 0.04, 0.45), frame, Vector3(0, 1.72, 0))
-			Kit.box(n, Vector3(0.8, 0.01, 0.01), Kit.emissive(Color("fff0d2"), 3.0, true), Vector3(0, 1.69, 0.18))
-			Kit.slab(n, Vector3(0.28, 0.015, 0.2), 0.01, 0.004, Kit.aluminium(Color("7a8189"), 0.34), null, null, Vector3(-0.2, 0.84, 0))
+				Kit.box(n, Vector3(0.66, 0.012, 0.38), Kit.glass(Color(0.9, 0.95, 1.0), 0.03, 0.3), Vector3(0, y, 0))
+			Kit.box(n, Vector3(0.7, 0.04, 0.42), frame, Vector3(0, 1.72, 0))
+			Kit.box(n, Vector3(0.6, 0.01, 0.01), Kit.emissive(Color("fff0d2"), 3.0, true), Vector3(0, 1.69, 0.17))
+			Kit.slab(n, Vector3(0.26, 0.015, 0.19), 0.01, 0.004, Kit.aluminium(Color("7a8189"), 0.34), null, null, Vector3(-0.14, 0.84, 0))
 			Kit.slab(n, Vector3(0.07, 0.008, 0.14), 0.01, 0.002, Kit.black_glass(), Kit.aluminium(Color("4a5a6e"), 0.22), null, Vector3(0.2, 0.84, 0), Vector3(0, 20, 0))
 			Kit.slab(n, Vector3(0.12, 0.024, 0.068), 0.026, 0.008, Kit.plastic(Color("e9ecef"), 0.4), null, null, Vector3(0.0, 1.22, 0))
 			Kit.slab(n, Vector3(0.26, 0.17, 0.12), 0.02, 0.01, Kit.pbr("walnut_pbr", 0.4, 0.0, Color("c88f5c"), Vector3(3, 3, 3), true), null, null, Vector3(-0.1, 1.29, 0), Vector3(90, 0, 0))
@@ -1584,44 +1585,60 @@ func _extra_surfaces() -> void:
 # -----------------------------------------------------------------------------
 # Display stand for new products (front-left corner, customers browse it)
 # -----------------------------------------------------------------------------
-const STAND_POS := Vector3(-1.55, 0.0, 2.38)
-const STAND_BROWSE := Vector3(-1.55, 0.0, 1.88)
+const STAND_POS := Vector3(-1.32, 0.0, 2.37)
+const STAND_BROWSE := Vector3(-1.32, 0.0, 1.86)
 var stand_slots: Array[Vector3] = []
 var stand_root: Node3D
 
 
+## Retail wall unit: white gondola with a red brand header lightbox, 3 lit tiers and price rails.
 func _retail_stand() -> void:
 	stand_root = Node3D.new()
 	stand_root.name = "Stand"
 	stand_root.position = STAND_POS
 	stand_root.rotation_degrees.y = 180.0
 	root.add_child(stand_root)
-	var wood := Kit.pbr("walnut_pbr", 0.5, 0.0, Color("f1e6d6"), Vector3(2, 2, 2), true)
-	var trim := Kit.mat(Color("2d3436"), 0.4, 0.5)
-	Kit.slab(stand_root, Vector3(1.4, 0.72, 0.42), 0.02, 0.01, wood, null, null, Vector3(0, 0.36, 0), Vector3(90, 0, 0))
-	Kit.box(stand_root, Vector3(1.42, 0.03, 0.44), trim, Vector3(0, 0.735, 0))
-	# glass box with a mid shelf + LED strip
-	var glass := Kit.glass(Color(0.85, 0.95, 1.0), 0.02, 0.06)
-	Kit.box(stand_root, Vector3(1.36, 0.006, 0.38), glass, Vector3(0, 1.12, 0))
-	Kit.box(stand_root, Vector3(1.36, 0.006, 0.38), glass, Vector3(0, 1.5, 0))
-	Kit.box(stand_root, Vector3(1.36, 0.76, 0.006), glass, Vector3(0, 1.13, -0.19))
-	for x in [-0.69, 0.69]:
-		Kit.box(stand_root, Vector3(0.02, 0.78, 0.4), trim, Vector3(x, 1.13, 0))
-	Kit.box(stand_root, Vector3(1.3, 0.008, 0.012), Kit.emissive(Color("fff3d6"), 3.0, true), Vector3(0, 1.49, 0.17))
-	var l := OmniLight3D.new()
-	l.position = Vector3(0, 1.4, 0.3)
-	l.light_color = Color("fff1d0")
-	l.light_energy = 0.9
-	l.omni_range = 1.4
-	stand_root.add_child(l)
+	var white := Kit.plastic(Color("f6f4ef"), 0.35, 0.05)
+	white.clearcoat_enabled = true
+	white.clearcoat = 0.6
+	var brand := Kit.plastic(Color("e2352b"), 0.3, 0.05)
+	brand.clearcoat_enabled = true
+	brand.clearcoat = 0.8
+	var oak := Kit.pbr("walnut_pbr", 0.45, 0.0, Color("e8c9a0"), Vector3(2, 2, 2), true)
+	var w := 1.24
+	var d := 0.42
+	# side panels (red, rounded) + back panel with a soft pattern
+	for x in [-w * 0.5 - 0.02, w * 0.5 + 0.02]:
+		Kit.slab(stand_root, Vector3(0.04, d + 0.02, 1.86), 0.02, 0.012, brand, null, null, Vector3(x, 0.93, 0), Vector3(90, 0, 0))
+	Kit.slab(stand_root, Vector3(w, 0.03, 1.5), 0.01, 0.006, white, null, null, Vector3(0, 0.93, -d * 0.5 + 0.015), Vector3(90, 0, 0))
+	for i in range(7):
+		for j in range(12):
+			Kit.cyl(stand_root, 0.006, 0.004, Kit.mat(Color("d9d4ca"), 0.6), Vector3(-0.5 + j * 0.091, 0.3 + i * 0.2, -d * 0.5 + 0.032), Vector3(90, 0, 0))
+	# base cabinet with oak top and two doors
+	Kit.slab(stand_root, Vector3(w, d, 0.5), 0.015, 0.008, white, null, null, Vector3(0, 0.27, 0), Vector3(90, 0, 0))
+	Kit.slab(stand_root, Vector3(w + 0.02, 0.035, d + 0.02), 0.01, 0.006, oak, oak, oak, Vector3(0, 0.535, 0))
+	Kit.box(stand_root, Vector3(w - 0.04, 0.05, 0.01), Kit.mat(Color("2d3436"), 0.5), Vector3(0, 0.035, d * 0.5 - 0.005))
+	for x in [-0.3, 0.3]:
+		Kit.box(stand_root, Vector3(0.58, 0.4, 0.006), Kit.plastic(Color("ecebe6"), 0.35), Vector3(x, 0.29, d * 0.5 + 0.004))
+		Kit.capsule(stand_root, 0.006, 0.12, Kit.chrome(), Vector3(x + (0.24 if x < 0 else -0.24), 0.36, d * 0.5 + 0.02))
+	# two oak shelves with LED strips and clear price rails
+	for y in [1.0, 1.42]:
+		Kit.slab(stand_root, Vector3(w, 0.03, d - 0.04), 0.008, 0.005, oak, oak, oak, Vector3(0, y, 0.0))
+		Kit.box(stand_root, Vector3(w - 0.08, 0.008, 0.012), Kit.emissive(Color("fff4dc"), 3.0, true), Vector3(0, y - 0.022, d * 0.5 - 0.06))
+		Kit.box(stand_root, Vector3(w, 0.035, 0.006), Kit.glass(Color(0.9, 0.97, 1.0), 0.05, 0.25), Vector3(0, y + 0.02, d * 0.5 - 0.02))
+	Kit.box(stand_root, Vector3(w, 0.035, 0.006), Kit.glass(Color(0.9, 0.97, 1.0), 0.05, 0.25), Vector3(0, 0.575, d * 0.5 - 0.005))
+	# header lightbox
+	Kit.slab(stand_root, Vector3(w + 0.08, 0.12, 0.3), 0.03, 0.015, brand, null, null, Vector3(0, 1.94, 0.0), Vector3(90, 0, 0))
+	Kit.box(stand_root, Vector3(w - 0.04, 0.22, 0.004), Kit.emissive(Color("ff5a4a"), 1.2, true), Vector3(0, 1.94, 0.062))
 	var sign := Label3D.new()
 	sign.name = "StandSign"
 	sign.text = I18n.t("NOVIDADES")
-	sign.font_size = 56
+	sign.font_size = 72
 	sign.pixel_size = 0.0011
-	sign.modulate = Color("e74c3c")
-	sign.outline_size = 8
-	sign.position = Vector3(0, 1.62, 0.0)
+	sign.modulate = Color("ffffff")
+	sign.outline_size = 0
+	sign.shaded = false
+	sign.position = Vector3(0, 1.94, 0.066)
 	var f := load("res://assets/fonts/Nunito-ExtraBold.ttf")
 	if f:
 		sign.font = f
@@ -1629,13 +1646,23 @@ func _retail_stand() -> void:
 	var price_tag := Label3D.new()
 	price_tag.name = "StandHint"
 	price_tag.text = I18n.t("Produtos novos  •  Paga no balcão")
-	price_tag.font_size = 28
+	price_tag.font_size = 30
 	price_tag.pixel_size = 0.0009
 	price_tag.modulate = Color("2d3436")
-	price_tag.position = Vector3(0, 0.6, 0.215)
+	price_tag.position = Vector3(0, 0.44, d * 0.5 + 0.01)
 	stand_root.add_child(price_tag)
-	for y in [0.75, 1.125]:
+	# warm spotlights from the header
+	for x in [-0.35, 0.35]:
+		var sl := SpotLight3D.new()
+		sl.position = Vector3(x, 1.86, 0.2)
+		sl.rotation_degrees = Vector3(-62, 0, 0)
+		sl.light_color = Color("fff1d6")
+		sl.light_energy = 2.2
+		sl.spot_range = 2.2
+		sl.spot_angle = 38.0
+		stand_root.add_child(sl)
+	for y in [0.553, 1.016, 1.436]:
 		for k in range(4):
-			stand_slots.append(stand_root.transform * Vector3(-0.51 + k * 0.34, y, 0.02))
-	var b := Kit.static_body(stand_root, Kit.box_shape(Vector3(1.42, 1.5, 0.44)), Vector3(0, 0.78, 0), "stand")
+			stand_slots.append(stand_root.transform * Vector3(-0.45 + k * 0.3, y, 0.04))
+	var b := Kit.static_body(stand_root, Kit.box_shape(Vector3(1.3, 1.9, 0.44)), Vector3(0, 0.95, 0), "stand")
 	b.collision_layer = 1

@@ -730,7 +730,9 @@ func _walk_ok(p: Vector3) -> bool:
 	var in_main := p.x >= -2.3 and p.x <= 2.3 and p.z <= 2.3 and (p.z >= -0.62 or (p.x < -2.0 and p.z >= -1.05))
 	if in_main and p.x > -0.65 and p.x < 1.65 and p.z > 1.0 and p.z < 1.95:
 		in_main = false
-	if in_main and p.x > -2.35 and p.x < -0.75 and p.z > 2.08:
+	if in_main and p.x > -2.35 and p.x < -0.5 and p.z > 2.08:
+		in_main = false
+	if in_main and p.x < -2.05 and p.z > 1.78:
 		in_main = false
 	var in_door := p.x >= -2.98 and p.x <= -2.2 and p.z >= -1.05 and p.z <= -0.45
 	var in_back := p.x >= -4.45 and p.x <= -2.88 and p.z >= -1.55 and p.z <= 0.42
@@ -5985,7 +5987,8 @@ func _stand_set(i: int, key: String, qty: int) -> void:
 	var size: Vector3 = Data.PRODUCTS[key]["size"]
 	for u in range(qty):
 		var m := _product_model(key)
-		m.position = Vector3((u % 2) * 0.05 - 0.025, 0, -float(u) * (size.z + 0.01) + 0.06)
+		m.scale = Vector3.ONE * 1.25
+		m.position = Vector3((u % 2) * 0.04 - 0.02, 0, -float(u) * (size.z * 1.25 + 0.012) + 0.07)
 		n.add_child(m)
 	var tag := Label3D.new()
 	tag.text = _eur(float(Data.PRODUCTS[key]["sell"]))
@@ -6088,7 +6091,7 @@ func _spawn_shopper() -> void:
 	room.open_door()
 	_sfx("door_chime", 0.6)
 	var oid: int = order_seq
-	c.walk_path([DOOR_IN, Vector3(-0.85, 0, 2.1), Room.STAND_BROWSE], func() -> void:
+	c.walk_path([DOOR_IN, Vector3(-0.55, 0, 2.08), Room.STAND_BROWSE], func() -> void:
 		c.rotation.y = 0.0
 		get_tree().create_timer(randf_range(3.0, 6.0)).timeout.connect(func() -> void:
 			if not is_instance_valid(c) or not customers.has(oid):
@@ -6103,7 +6106,7 @@ func _spawn_shopper() -> void:
 			c.set_meta("purpose", "buy")
 			c.set_mood("happy")
 			counter_queue.append(oid)
-			c.walk_path([Vector3(-0.85, 0, 2.1), _queue_spot(counter_queue.size() - 1)], func() -> void:
+			c.walk_path([Vector3(-0.55, 0, 2.08), _queue_spot(counter_queue.size() - 1)], func() -> void:
 				c.rotation.y = PI
 				c.look_enabled = true
 				c.set_bubble("buy"))
