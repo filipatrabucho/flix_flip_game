@@ -1,4 +1,4 @@
-# Fix & Flip Tech — v1.1
+# Fix & Flip Tech — v1.2
 
 Simulador de oficina de eletrónica em **Godot 4** (Forward+). Compra equipamentos avariados, repara-os passo a passo com as mãos (de luva) e ferramentas reais, e revende com lucro.
 
@@ -60,6 +60,21 @@ Os clientes entram pela porta da loja, fazem fila no balcão e esperam com um **
 - **Clientes calmos no início**: nos primeiros capítulos só há um trabalho de cada vez, e o cliente seguinte chega depois de entregares.
 - **Personagens mais realistas**: corpo com proporções humanas, joelhos e cotovelos, mãos com dedos, rosto com nariz, orelhas, íris colorida, pestanas e piscar de olhos, e roupa variada (camisa, hoodie, casaco).
 
+## Novidades v1.2
+
+- **Pausa (Esc)** com Continuar, Guardar, **Definições no próprio jogo** (volumes de música e efeitos, sensibilidade, qualidade gráfica, idioma) e Sair para o menu.
+- **3 ranhuras de gravação**: Novo jogo e Carregar mostram 3 ranhuras com dia, dinheiro e capítulo. Antes de escrever por cima de uma ranhura o jogo pede confirmação. O save antigo é migrado para a ranhura 1.
+- **Caixa registadora de loja moderna** à direita do balcão, virada para ti: gaveta com tabuleiros de notas, ecrã tátil inclinado, visor para o cliente e impressora de talões.
+- **Telefone antigo mais percetível**: auscultador curvo com bocal e auricular, garfo com pinos, contactos de latão visíveis e uma animação de levantar o auscultador.
+- **Arrumar a oficina (G)**: olha para uma ferramenta, decoração ou objeto, carrega **G** para lhe pegar e move-o pela bancada, pelo balcão ou pela parede. Roda do rato ou **R** para rodar, clique ou **G** para pousar. As posições ficam gravadas.
+- **Decorações (separador nas Melhorias)**: posters, gato de néon, relógio de parede com horas reais do jogo, luzes de fio, planta grande, tapete, candeeiro de lava, robô e cato.
+- **Quarto das traseiras**: porta na parede esquerda. Tem saco-cama, frigorífico com snacks e chaleira. Ao fim do dia fechas a loja e dormes até ao dia seguinte.
+- **Energia e fome**: as duas barras aparecem no HUD. A energia recupera com café (chaleira ou máquina de café) e a descansar. A fome recupera com snacks do frigorífico. Com pouca energia andas mais devagar e, exausto, já não consegues reparar.
+- **Sentar no banco**: há bancos atrás do balcão e junto à bancada. Sentado, o tempo passa 4× mais depressa e recuperas energia enquanto esperas por clientes.
+- **Campainha do balcão**: toca quando quiseres (plim plim!).
+- **Carteiro de boné** que entra pela porta com as encomendas e as deixa na prateleira «Receção».
+- **Ritmo de clientes**: os clientes já não esperam que acabes o trabalho anterior. Chegam um ou dois de cada vez, com intervalos irregulares, e o número de pedidos abertos sobe com os capítulos.
+
 ## Idiomas
 
 Português e English: Definições → Idioma / Language.
@@ -79,7 +94,10 @@ Português e English: Definições → Idioma / Language.
 | Clique esquerdo | Usar ferramenta / mão no ponto assinalado |
 | Clique direito + arrastar | Rodar a vista (na reparação) |
 | Roda do rato | Zoom (na reparação) |
-| Esc | Voltar / pausa |
+| G | Pegar e mover um objeto (arrumar a oficina) |
+| R / roda do rato | Rodar o objeto que estás a mover |
+| E (no banco, saco-cama, frigorífico, café, campainha) | Sentar, dormir, comer, beber, tocar |
+| Esc | Voltar / pausa (com definições) |
 
 ## Reparações
 
