@@ -22,7 +22,8 @@ const Tools = preload("res://scripts/tools3d.gd")
 const UIcon = preload("res://scripts/ui_icon.gd")
 const Radial = preload("res://scripts/radial_menu.gd")
 
-const SAVE_PATH := "user://fix_flip_save.json"
+const SAVE_PATH := "user://fix_flip_save_%d.json"
+const OLD_SAVE_PATH := "user://fix_flip_save.json"
 const SETTINGS_PATH := "user://fix_flip_settings.cfg"
 const VERSION := "v1.0"
 
@@ -177,6 +178,10 @@ var wheel: Control
 var popup_root: Control
 var popup_box: VBoxContainer
 var pause_root: Control
+var pause_panel: PanelContainer
+var pause_main: VBoxContainer
+var pause_settings_box: VBoxContainer
+var current_slot := 1
 var fade: ColorRect
 var meter_panel: PanelContainer
 var board_root: Control
@@ -198,6 +203,7 @@ func _sfx(name: String, vol := 1.0) -> void:
 func _ready() -> void:
 	randomize()
 	_load_settings()
+	_migrate_old_save()
 	audio = AudioMgr.new()
 	add_child(audio)
 	audio.set_volumes(float(settings.get("music", 0.6)), float(settings.get("sfx", 0.8)))
@@ -2273,7 +2279,7 @@ func _chapter_goal_text() -> String:
 # Save / settings
 # =============================================================================
 func _save_game() -> void:
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var f := FileAccess.open(SAVE_PATH % current_slot, FileAccess.WRITE)
 	if f == null:
 		return
 	var pending_cash := 0.0
@@ -2289,13 +2295,36 @@ func _save_game() -> void:
 
 
 func _has_save() -> bool:
-	return FileAccess.file_exists(SAVE_PATH)
+	for i in range(1, 4):
+		if FileAccess.file_exists(SAVE_PATH % i):
+			return true
+	return false
+
+
+func _slot_exists(i: int) -> bool:
+	return FileAccess.file_exists(SAVE_PATH % i)
+
+
+func _slot_info(i: int) -> Dictionary:
+	if not _slot_exists(i):
+		return {}
+	var f := FileAccess.open(SAVE_PATH % i, FileAccess.READ)
+	if f == null:
+		return {}
+	var data = JSON.parse_string(f.get_as_text())
+	return data if data is Dictionary else {}
+
+
+## One-time migration of the single save file from older versions into slot 1.
+func _migrate_old_save() -> void:
+	if FileAccess.file_exists(OLD_SAVE_PATH) and not _slot_exists(1):
+		DirAccess.copy_absolute(ProjectSettings.globalize_path(OLD_SAVE_PATH), ProjectSettings.globalize_path(SAVE_PATH % 1))
 
 
 func _load_game() -> bool:
-	if not _has_save():
+	if not _slot_exists(current_slot):
 		return false
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var f := FileAccess.open(SAVE_PATH % current_slot, FileAccess.READ)
 	if f == null:
 		return false
 	var data = JSON.parse_string(f.get_as_text())
@@ -3604,8 +3633,8 @@ func _build_menu(base: Control) -> void:
 	menu_buttons = VBoxContainer.new()
 	menu_buttons.add_theme_constant_override("separation", 10)
 	col.add_child(menu_buttons)
-	menu_buttons.add_child(_menu_button(T("Começar Jogo"), "play", true, _new_game))
-	load_button = _menu_button(T("Carregar Jogo"), "folder", false, _continue_game)
+	menu_buttons.add_child(_menu_button(T("Começar Jogo"), "play", true, func() -> void: _show_slots("new")))
+	load_button = _menu_button(T("Carregar Jogo"), "folder", false, func() -> void: _show_slots("load"))
 	menu_buttons.add_child(load_button)
 	menu_buttons.add_child(_menu_button(T("Definições"), "gear", false, func() -> void: _show_menu_panel("settings")))
 	menu_buttons.add_child(_menu_button(T("Créditos"), "info", false, func() -> void: _show_menu_panel("credits")))
@@ -3707,15 +3736,84 @@ func _menu_button(text: String, icon_kind: String, primary: bool, action: Callab
 	return b
 
 
-func _rebuild_ui() -> void:
+func _rebuild_ui(in_game := false) -> void:
 	if ui:
 		ui.queue_free()
 	ui = null
 	hotbar_slots.clear()
 	room.relabel()
 	_build_ui()
-	_show_menu()
-	_show_menu_panel("settings")
+	if not in_game:
+		_show_menu()
+		_show_menu_panel("settings")
+		return
+	menu_root.hide()
+	hud.show()
+	crosshair.show()
+	reticle.hide()
+	repair_panel.hide()
+	hints_bar.hide()
+	_hotbar_compact(false)
+	_refresh_hotbar()
+	_refresh_objective()
+	_refresh_orders_badge()
+	_pause()
+	_pause_settings()
+
+
+func _settings_controls(v: VBoxContainer, in_game: bool) -> void:
+	v.add_child(_label(T("Qualidade gráfica"), 16, MUTED))
+	var q := OptionButton.new()
+	for t in [T("Baixa (PC fraco)"), T("Média"), T("Alta (SSIL, reflexos, nevoeiro)")]:
+		q.add_item(t)
+	q.selected = int(settings["quality"])
+	q.item_selected.connect(func(i: int) -> void:
+		settings["quality"] = i
+		_apply_settings()
+		_save_settings())
+	v.add_child(q)
+	v.add_child(_label(T("Idioma / Language"), 16, MUTED))
+	var lang := OptionButton.new()
+	lang.add_item("Português")
+	lang.add_item("English")
+	lang.selected = 1 if I18n.lang == "en" else 0
+	lang.item_selected.connect(func(i: int) -> void:
+		settings["lang"] = "en" if i == 1 else "pt"
+		I18n.lang = settings["lang"]
+		_save_settings()
+		_rebuild_ui(in_game))
+	v.add_child(lang)
+	for vol in [["music", T("Volume da música")], ["sfx", T("Volume dos efeitos")]]:
+		v.add_child(_label(vol[1], 16, MUTED))
+		var vs := HSlider.new()
+		vs.min_value = 0.0
+		vs.max_value = 1.0
+		vs.step = 0.05
+		var key: String = vol[0]
+		vs.value = float(settings.get(key, 0.6 if key == "music" else 0.8))
+		vs.value_changed.connect(func(val: float) -> void:
+			settings[key] = val
+			audio.set_volumes(float(settings.get("music", 0.6)), float(settings.get("sfx", 0.8)))
+			_save_settings())
+		v.add_child(vs)
+	v.add_child(_label(T("Sensibilidade do rato"), 16, MUTED))
+	var s := HSlider.new()
+	s.min_value = 0.3
+	s.max_value = 2.5
+	s.step = 0.05
+	s.value = float(settings["sensitivity"])
+	s.value_changed.connect(func(val: float) -> void:
+		settings["sensitivity"] = val
+		_save_settings())
+	v.add_child(s)
+	var fs := CheckButton.new()
+	fs.text = T("Ecrã inteiro")
+	fs.button_pressed = bool(settings["fullscreen"])
+	fs.toggled.connect(func(on: bool) -> void:
+		settings["fullscreen"] = on
+		_apply_settings()
+		_save_settings())
+	v.add_child(fs)
 
 
 func _show_menu_panel(which: String) -> void:
@@ -3730,58 +3828,7 @@ func _show_menu_panel(which: String) -> void:
 	p.add_child(v)
 	if which == "settings":
 		v.add_child(_label(T("Definições"), 24, YELLOW, font_xbold))
-		v.add_child(_label(T("Qualidade gráfica"), 16, MUTED))
-		var q := OptionButton.new()
-		for t in [T("Baixa (PC fraco)"), T("Média"), T("Alta (SSIL, reflexos, nevoeiro)")]:
-			q.add_item(t)
-		q.selected = int(settings["quality"])
-		q.item_selected.connect(func(i: int) -> void:
-			settings["quality"] = i
-			_apply_settings()
-			_save_settings())
-		v.add_child(q)
-		v.add_child(_label(T("Idioma / Language"), 16, MUTED))
-		var lang := OptionButton.new()
-		lang.add_item("Português")
-		lang.add_item("English")
-		lang.selected = 1 if I18n.lang == "en" else 0
-		lang.item_selected.connect(func(i: int) -> void:
-			settings["lang"] = "en" if i == 1 else "pt"
-			I18n.lang = settings["lang"]
-			_save_settings()
-			_rebuild_ui())
-		v.add_child(lang)
-		for vol in [["music", T("Volume da música")], ["sfx", T("Volume dos efeitos")]]:
-			v.add_child(_label(vol[1], 16, MUTED))
-			var vs := HSlider.new()
-			vs.min_value = 0.0
-			vs.max_value = 1.0
-			vs.step = 0.05
-			var key: String = vol[0]
-			vs.value = float(settings.get(key, 0.6 if key == "music" else 0.8))
-			vs.value_changed.connect(func(val: float) -> void:
-				settings[key] = val
-				audio.set_volumes(float(settings.get("music", 0.6)), float(settings.get("sfx", 0.8)))
-				_save_settings())
-			v.add_child(vs)
-		v.add_child(_label(T("Sensibilidade do rato"), 16, MUTED))
-		var s := HSlider.new()
-		s.min_value = 0.3
-		s.max_value = 2.5
-		s.step = 0.05
-		s.value = float(settings["sensitivity"])
-		s.value_changed.connect(func(val: float) -> void:
-			settings["sensitivity"] = val
-			_save_settings())
-		v.add_child(s)
-		var fs := CheckButton.new()
-		fs.text = T("Ecrã inteiro")
-		fs.button_pressed = bool(settings["fullscreen"])
-		fs.toggled.connect(func(on: bool) -> void:
-			settings["fullscreen"] = on
-			_apply_settings()
-			_save_settings())
-		v.add_child(fs)
+		_settings_controls(v, false)
 	else:
 		v.add_child(_label(T("Créditos"), 24, YELLOW, font_xbold))
 		var t := _label(T("Fix & Flip Tech — protótipo de simulação de oficina.\n\nModelos 3D, materiais e animações gerados por código no Godot 4.\nTipo de letra: Nunito (SIL Open Font License).\n\nObrigado por jogares!"), 16, TEXT)
@@ -3792,6 +3839,88 @@ func _show_menu_panel(which: String) -> void:
 		for c in menu_panel_host.get_children():
 			c.queue_free())
 	v.add_child(close)
+
+
+## Save slot picker (3 slots): new game or load.
+func _show_slots(purpose: String) -> void:
+	for c in menu_panel_host.get_children():
+		c.queue_free()
+	var p := _panel(Color(0.04, 0.07, 0.12, 0.93), 14, Vector4(22, 18, 22, 18))
+	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	p.custom_minimum_size = Vector2(420, 0)
+	menu_panel_host.add_child(p)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	p.add_child(v)
+	v.add_child(_label(T("Novo jogo — escolhe uma ranhura") if purpose == "new" else T("Carregar jogo"), 22, YELLOW, font_xbold))
+	for i in range(1, 4):
+		var info := _slot_info(i)
+		var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(14, 10, 14, 10))
+		card.mouse_filter = Control.MOUSE_FILTER_PASS
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		card.add_child(h)
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_child(_label(T("Ranhura %d") % i, 18, TEXT, font_xbold))
+		if info.is_empty():
+			col.add_child(_label(T("Vazia"), 14, MUTED))
+		else:
+			var ch: int = clampi(int(info.get("story_chapter", 0)), 0, Story.CHAPTERS.size() - 1)
+			col.add_child(_label("%s %d  •  %s  •  %d %s" % [T("Dia"), int(info.get("day", 1)), _eur(float(info.get("money", 0))), int(info.get("repaired", 0)), T("reparações")], 14, MUTED))
+			col.add_child(_label(I18n.pick(Story.CHAPTERS[ch]["title"]), 13, Color("8fd8ff")))
+		h.add_child(col)
+		var slot := i
+		if purpose == "new":
+			var b := _small_button(T("Começar") if info.is_empty() else T("Substituir"), info.is_empty())
+			b.pressed.connect(func() -> void:
+				if _slot_exists(slot):
+					_confirm_overwrite(slot)
+				else:
+					current_slot = slot
+					_new_game())
+			h.add_child(b)
+		elif not info.is_empty():
+			var b2 := _small_button(T("Continuar"), true)
+			b2.pressed.connect(func() -> void:
+				current_slot = slot
+				_continue_game())
+			h.add_child(b2)
+			var del := _small_button(T("Apagar"), false)
+			del.custom_minimum_size = Vector2(80, 36)
+			del.pressed.connect(func() -> void:
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH % slot))
+				_show_slots(purpose)
+				_update_load_button())
+			h.add_child(del)
+		v.add_child(card)
+	v.add_child(_menu_button(T("Voltar"), "play", false, func() -> void:
+		for c in menu_panel_host.get_children():
+			c.queue_free()))
+
+
+func _confirm_overwrite(slot: int) -> void:
+	for c in menu_panel_host.get_children():
+		c.queue_free()
+	var p := _panel(Color(0.04, 0.07, 0.12, 0.95), 14, Vector4(22, 18, 22, 18))
+	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	p.custom_minimum_size = Vector2(380, 0)
+	menu_panel_host.add_child(p)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	p.add_child(v)
+	v.add_child(_label(T("Substituir a ranhura %d?") % slot, 22, YELLOW, font_xbold))
+	v.add_child(_label(T("O progresso guardado nesta ranhura vai ser apagado."), 15, MUTED))
+	var yes := _menu_button(T("Sim, começar de novo"), "play", true, func() -> void:
+		current_slot = slot
+		_new_game())
+	v.add_child(yes)
+	v.add_child(_menu_button(T("Voltar"), "play", false, func() -> void: _show_slots("new")))
+
+
+func _update_load_button() -> void:
+	load_button.disabled = not _has_save()
+	(load_button.get_meta("label") as Label).modulate.a = 1.0 if _has_save() else 0.45
 
 
 func _show_menu() -> void:
@@ -3805,8 +3934,7 @@ func _show_menu() -> void:
 	popup_root.hide()
 	board_root.hide()
 	hand.visible = false
-	load_button.disabled = not _has_save()
-	(load_button.get_meta("label") as Label).modulate.a = 1.0 if _has_save() else 0.45
+	_update_load_button()
 	_reset_walk_camera()
 
 
@@ -3890,19 +4018,26 @@ func _build_pause(base: Control) -> void:
 	p.anchor_right = 0.5
 	p.anchor_top = 0.5
 	p.anchor_bottom = 0.5
-	p.offset_left = -180
-	p.offset_right = 180
-	p.offset_top = -170
-	p.offset_bottom = 170
+	p.offset_left = -200
+	p.offset_right = 200
+	p.offset_top = -270
+	p.offset_bottom = 270
 	pause_root.add_child(p)
+	pause_panel = p
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
 	p.add_child(v)
+	pause_main = v
+	pause_settings_box = VBoxContainer.new()
+	pause_settings_box.add_theme_constant_override("separation", 10)
+	p.add_child(pause_settings_box)
+	pause_settings_box.hide()
 	v.add_child(_label(T("Pausa"), 28, YELLOW, font_xbold))
 	v.add_child(_menu_button(T("Continuar"), "play", true, _resume))
+	v.add_child(_menu_button(T("Definições"), "gear", false, _pause_settings))
 	v.add_child(_menu_button(T("Guardar Jogo"), "folder", false, func() -> void:
 		_save_game()
-		_toast(T("Jogo guardado."), false, GREEN)))
+		_toast(T("Jogo guardado na ranhura %d.") % current_slot, false, GREEN)))
 	v.add_child(_menu_button(T("Menu Principal"), "info", false, func() -> void:
 		_save_game()
 		_show_menu()))
@@ -3916,6 +4051,21 @@ func _pause() -> void:
 	mode = "pause"
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	pause_root.show()
+	pause_main.show()
+	pause_settings_box.hide()
+
+
+func _pause_settings() -> void:
+	for c in pause_settings_box.get_children():
+		pause_settings_box.remove_child(c)
+		c.queue_free()
+	pause_settings_box.add_child(_label(T("Definições"), 26, YELLOW, font_xbold))
+	_settings_controls(pause_settings_box, true)
+	pause_settings_box.add_child(_menu_button(T("Voltar"), "play", false, func() -> void:
+		pause_settings_box.hide()
+		pause_main.show()))
+	pause_main.hide()
+	pause_settings_box.show()
 
 
 func _resume() -> void:
