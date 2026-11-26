@@ -606,16 +606,20 @@ func label3d_root(text: String, pos: Vector3, pixel: float) -> void:
 	root.add_child(l)
 
 
-func _floor_props() -> void:
-	# stool
+func _stool(sp: Vector3) -> void:
 	var seat := Kit.mat(Color("17191c"), 0.55)
-	var sp := Vector3(-1.0, 0, -0.25)
 	Kit.cyl(root, 0.19, 0.06, seat, sp + Vector3(0, 0.62, 0), Vector3.ZERO, 0.18, 40)
 	Kit.cyl(root, 0.025, 0.5, Kit.chrome(), sp + Vector3(0, 0.35, 0))
 	Kit.torus(root, 0.15, 0.165, Kit.chrome(), sp + Vector3(0, 0.25, 0))
 	for i in range(4):
 		var a := TAU * i / 4.0 + 0.4
 		Kit.mi(root, Kit.tube_mesh(PackedVector3Array([sp + Vector3(0, 0.12, 0), sp + Vector3(cos(a) * 0.24, 0.0, sin(a) * 0.24)]), 0.012, 8), Kit.chrome())
+
+
+func _floor_props() -> void:
+	# stools: one by the bench, one behind the counter
+	for sp_i in stools:
+		_stool(sp_i)
 	# anti-fatigue floor mat
 	Kit.slab(root, Vector3(1.2, 0.012, 0.6), 0.03, 0.005, Kit.rubber(Color("202429")), null, null, Vector3(0, 0.006, -0.6))
 	# stack of boxes in the back right corner
@@ -1063,6 +1067,7 @@ const BACK_X1 := -2.7
 const BACK_Z0 := ROOM_BACK
 const BACK_Z1 := 0.6
 var bed_pos := Vector3(-4.05, 0.0, -0.85)
+var stools: Array[Vector3] = [Vector3(-1.0, 0, -0.25), Vector3(1.05, 0, 0.82)]
 var fridge_pos := Vector3(-3.05, 0.0, -1.42)
 var kettle_pos := Vector3(-3.62, 0.0, -1.5)
 

@@ -227,6 +227,9 @@ func _ready() -> void:
 	_build_shelf_targets()
 	var bell_body := Kit.static_body(self, Kit.sphere_shape(0.07), room.bell.global_position + Vector3(0, 0.03, 0), "bell")
 	bell_body.collision_layer = 1
+	for si in range(room.stools.size()):
+		var sb := Kit.static_body(self, Kit.sphere_shape(0.22), room.stools[si] + Vector3(0, 0.62, 0), "stool:%d" % si)
+		sb.collision_layer = 1
 	for t in [["bed", room.bed_pos + Vector3(0, 0.15, 0), Vector3(0.8, 0.35, 2.0)], ["fridge", room.fridge_pos + Vector3(0, 0.45, 0), Vector3(0.6, 0.9, 0.6)], ["kettle", room.kettle_pos + Vector3(0, 0.55, 0), Vector3(0.5, 0.3, 0.4)]]:
 		var tb := Kit.static_body(self, Kit.box_shape(t[2]), t[1], t[0])
 		tb.collision_layer = 1
@@ -493,11 +496,14 @@ func _freeze_viewport_later(vp: SubViewport) -> void:
 # Main loop
 # =============================================================================
 func _process(delta: float) -> void:
-	if mode in ["walk", "inspect", "wheel"]:
-		var dm := delta * (1.0 if mode != "wheel" else 0.25)
+	if mode in ["walk", "inspect", "wheel", "sit"]:
+		var dm := delta * (0.25 if mode == "wheel" else (4.0 if mode == "sit" else 1.0))
 		minutes += dm
 		hunger = maxf(0.0, hunger - dm * 0.09)
-		stamina = maxf(0.0, stamina - dm * 0.035 * (2.5 if hunger <= 0.0 else (1.6 if hunger < 25.0 else 1.0)))
+		if mode == "sit":
+			stamina = minf(100.0, stamina + dm * (0.12 if hunger > 0.0 else 0.03))
+		else:
+			stamina = maxf(0.0, stamina - dm * 0.035 * (2.5 if hunger <= 0.0 else (1.6 if hunger < 25.0 else 1.0)))
 		_update_fatigue()
 		if minutes >= 20 * 60:
 			_end_of_day()
@@ -526,6 +532,11 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		_handle_key(event as InputEventKey)
+	if mode == "sit" and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		var sens2: float = 0.0024 * float(settings["sensitivity"])
+		walk_yaw -= event.relative.x * sens2
+		walk_pitch = clampf(walk_pitch - event.relative.y * sens2, -1.35, 1.2)
+		cam.rotation = Vector3(walk_pitch, walk_yaw, 0)
 	match mode:
 		"walk":
 			if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -571,6 +582,12 @@ func _handle_key(e: InputEventKey) -> void:
 	if mode == "dialog":
 		if k == KEY_E or k == KEY_ENTER or k == KEY_SPACE or k == KEY_KP_ENTER:
 			_dialog_advance()
+		return
+	if mode == "sit":
+		if k == KEY_ESCAPE:
+			_pause()
+		elif k in [KEY_E, KEY_W, KEY_A, KEY_S, KEY_D, KEY_SPACE, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]:
+			_stand_up()
 		return
 	if mode == "board":
 		if k == KEY_ESCAPE or (k == KEY_P and board_kind == "orders") or (k == KEY_L and board_kind == "shop") or (k == KEY_U and board_kind == "upgrades"):
@@ -680,6 +697,9 @@ func _walk_hover() -> void:
 		elif t == "bell":
 			pick = "bell"
 			where = hit.collider.global_position + Vector3(0, 0.08, 0)
+		elif t.begins_with("stool:"):
+			pick = t
+			where = hit.collider.global_position + Vector3(0, 0.3, 0)
 		elif t in ["bed", "fridge", "kettle", "coffee_machine"]:
 			pick = t
 			where = hit.collider.global_position + Vector3(0, 0.35, 0)
@@ -726,6 +746,9 @@ func _walk_hover() -> void:
 		return
 	if pick == "bed":
 		_show_prompt("E", T("Fechar a loja e dormir"), where)
+		return
+	if pick.begins_with("stool:"):
+		_show_prompt("E", T("Sentar e esperar por clientes"), where)
 		return
 	if pick == "fridge":
 		_show_prompt("E", T("Comer um snack (%s)") % _eur(3.0), where)
@@ -783,6 +806,9 @@ func _interact_walk() -> void:
 			_shelf_place(si)
 		elif carrying.is_empty() and shelf_items[si] != null:
 			_shelf_take(si)
+		return
+	if hovered_pick.begins_with("stool:"):
+		_sit(int(hovered_pick.substr(6)))
 		return
 	if hovered_pick in ["bed", "fridge", "kettle", "coffee_machine"]:
 		_use_comfort(hovered_pick)
@@ -1599,10 +1625,8 @@ func _next_order_number() -> int:
 func _max_open_orders() -> int:
 	match _chapter_id():
 		"c1", "c2":
-			return 1
-		"c3":
 			return 2
-		"c4":
+		"c3", "c4":
 			return 3
 	return 4
 
@@ -1621,7 +1645,9 @@ func _order_tick() -> void:
 		if _open_orders() < _max_open_orders() and pending == 0 and minutes < 18 * 60:
 			_new_order()
 		var rate := clampf(_reputation() / 4.0, 0.7, 1.25) * (1.5 if bool(story_flags.get("press", false)) else 1.0) * (1.3 if upgrades.has("neon") else 1.0)
-		next_order_at = now + randf_range(55, 115) / rate
+		# irregular gaps: sometimes two people close together, sometimes a long quiet spell
+		var gap := randf_range(25, 70) if randf() < 0.35 else randf_range(70, 150)
+		next_order_at = now + gap / rate
 	# unanswered requests walk out
 	for o in orders.duplicate():
 		if o["status"] == "new" and now > float(o["expires"]):
@@ -3393,6 +3419,33 @@ func _use_comfort(what: String) -> void:
 					_go_to_sleep()], [T("Continuar a trabalhar"), _close_popup]], true)
 			else:
 				_go_to_sleep()
+
+
+var sit_return := Vector3.ZERO
+
+
+func _sit(i: int) -> void:
+	if not carrying.is_empty():
+		_toast(T("Pousa primeiro o que tens nas mãos."), true)
+		return
+	_equip("none")
+	prompt.hide()
+	sit_return = cam.position
+	mode = "sit"
+	var seat: Vector3 = room.stools[i]
+	var tw := create_tween()
+	tw.tween_property(cam, "position", seat + Vector3(0, 1.22, 0), 0.4).set_trans(Tween.TRANS_CUBIC)
+	_sfx("step", 0.5)
+	_set_hints([["E", T("Levantar")], ["Esc", T("Pausa")]])
+	hints_bar.show()
+	_toast(T("Sentado: o tempo passa mais depressa e recuperas energia. E para levantar."), false, YELLOW)
+
+
+func _stand_up() -> void:
+	mode = "walk"
+	hints_bar.hide()
+	var tw := create_tween()
+	tw.tween_property(cam, "position", Vector3(sit_return.x, EYE_H, sit_return.z), 0.35).set_trans(Tween.TRANS_CUBIC)
 
 
 func _go_to_sleep() -> void:
