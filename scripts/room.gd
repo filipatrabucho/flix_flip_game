@@ -921,6 +921,7 @@ func add_upgrade(id: String) -> void:
 			Kit.cyl(n, 0.019, 0.04, Kit.rubber(), Vector3(0, 0.1, 0))
 			Kit.cyl(n, 0.003, 0.05, Kit.chrome(), Vector3(0, 0.17, 0))
 			Kit.box(n, Vector3(0.012, 0.004, 0.003), Kit.emissive(Color("2ecc71"), 2.0), Vector3(0, 0.02, 0.036))
+			_upgrade_pick(n, id, Vector3(0.09, 0.2, 0.09), Vector3(0, 0.1, 0))
 		"lamp":
 			if lamp_light:
 				lamp_light.light_color = Color("f4f8ff")
@@ -935,12 +936,16 @@ func add_upgrade(id: String) -> void:
 			Kit.cyl(n, 0.03, 0.06, Kit.plastic(Color("f2efe9"), 0.3), Vector3(0, 0.05, 0.07))
 			Kit.box(n, Vector3(0.05, 0.02, 0.01), Kit.emissive(Color("ff8a3c"), 2.0), Vector3(0, 0.24, 0.111))
 			Kit.cyl(n, 0.02, 0.03, Kit.chrome(), Vector3(0, 0.1, 0.09))
+			var cb := Kit.static_body(n, Kit.box_shape(Vector3(0.22, 0.32, 0.26)), Vector3(0, 0.15, 0), "coffee_machine")
+			cb.collision_layer = 1
+			n.set_meta("body", cb)
 		"speaker":
 			n.position = Vector3(0.62, COUNTER_TOP, COUNTER_Z - 0.2)
 			var sp := Kit.fabric(Color("2a2e35"), 0.9, 0.5, 60.0)
 			Kit.slab(n, Vector3(0.14, 0.24, 0.13), 0.03, 0.02, sp, null, null, Vector3(0, 0.12, 0), Vector3(0, -25, 0))
 			Kit.cyl(n, 0.045, 0.004, Kit.mat(Color("15171a"), 0.5), Vector3(0.0, 0.15, 0.06), Vector3(90, -25, 0))
 			Kit.box(n, Vector3(0.08, 0.005, 0.004), Kit.emissive(Color("3aa8ff"), 3.0), Vector3(0.0, 0.03, 0.058))
+			_upgrade_pick(n, id, Vector3(0.17, 0.26, 0.16), Vector3(0, 0.13, 0))
 		"display":
 			# glass display cabinet next to the door with repaired gadgets
 			n.position = Vector3(-2.36, 0, 2.2)
@@ -962,8 +967,10 @@ func add_upgrade(id: String) -> void:
 			light.light_energy = 0.7
 			light.omni_range = 1.4
 			n.add_child(light)
+			_upgrade_pick(n, id, Vector3(0.72, 1.75, 0.44), Vector3(0, 0.87, 0))
 		"neon":
 			n.position = Vector3(-0.9, 2.15, ROOM_FRONT - 0.03)
+			n.rotation_degrees.y = 180.0
 			var l := Label3D.new()
 			l.text = I18n.t("REPARAÇÕES")
 			l.font_size = 120
@@ -972,7 +979,7 @@ func add_upgrade(id: String) -> void:
 			l.outline_modulate = Color(1.0, 0.1, 0.6, 0.85)
 			l.outline_size = 18
 			l.shaded = false
-			l.rotation_degrees = Vector3(0, 180, 0)
+			l.position = Vector3(0, 0, 0.01)
 			var f := load("res://assets/fonts/Nunito-ExtraBold.ttf")
 			if f:
 				l.font = f
@@ -981,8 +988,15 @@ func add_upgrade(id: String) -> void:
 			o.light_color = Color("ff4fb3")
 			o.light_energy = 1.2
 			o.omni_range = 2.0
-			o.position = Vector3(0, 0, -0.3)
+			o.position = Vector3(0, 0, 0.3)
 			n.add_child(o)
+			_upgrade_pick(n, id, Vector3(1.1, 0.2, 0.05), Vector3(0, 0, 0.02))
+
+
+## Invisible collider so an upgrade prop can be picked up and moved (G).
+func _upgrade_pick(n: Node3D, id: String, size: Vector3, pos: Vector3) -> void:
+	var b := Kit.static_body(n, Kit.box_shape(size), pos, "upgrade:" + id)
+	b.collision_layer = 1
 
 
 func clear_upgrades() -> void:

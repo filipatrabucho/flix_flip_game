@@ -72,6 +72,7 @@ Os clientes entram pela porta da loja, fazem fila no balcão e esperam com um **
 - **Passar trabalho a um técnico**: na bancada (tecla **T**, a olhar para o equipamento ou durante a reparação) ou nos Pedidos (botão «Passar a Ana ×1.7»). O técnico continua a partir do passo em que ficaste.
 - **Expositor «NOVIDADES»**: compras produtos novos na loja online (separador Mercado), como auriculares, carregadores, capas, power banks, comandos, ratos, colunas e cabos. Chegam pelo carteiro e vão para o expositor junto à montra. Os clientes vêm ver, escolhem e pagam no balcão (ou ao balconista). Carrega E no expositor para o repor com o que tens em armazém.
 - **Personagens em estilo boneco**: cabeça maior e redonda, olhos grandes com brilho, bochechas rosadas, mãos e pernas mais robustas e cores lisas.
+- **Melhorias também se mudam de sítio** (tecla G): a coluna de som, a máquina de café, a chave elétrica, a montra (no chão) e o néon (em qualquer parede). Podes, por exemplo, pôr o café na ponta do balcão para os clientes. As posições ficam gravadas.
 - **Pousar as coisas onde quiseres** (tecla G): ferramentas e decorações vão para qualquer superfície (bancada, balcão, prateleiras, armários, parapeito, frigorífico, bancadas do anexo) ou para o chão. Os equipamentos podem ir para qualquer superfície.
 
 ## Novidades v1.3 — A oficina cresce

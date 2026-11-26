@@ -801,6 +801,13 @@ func _walk_hover() -> void:
 		elif mt == "device" and devices.has(str(hit.collider.get_meta("device", ""))):
 			var did := str(hit.collider.get_meta("device"))
 			hovered_movable = {"node": devices[did], "kind": "device", "id": did, "pick": hit.collider, "place": "surface"}
+		elif mt.begins_with("upgrade:") or mt == "coffee_machine":
+			var uid := "coffee" if mt == "coffee_machine" else mt.substr(8)
+			if room.upgrade_nodes.has(uid):
+				hovered_movable = {"node": room.upgrade_nodes[uid], "kind": "upgrade", "id": uid, "pick": hit.collider, "place": UPGRADE_PLACE.get(uid, "surface")}
+				if mt != "coffee_machine":
+					pick = mt
+					where = hit.collider.global_position + Vector3(0, 0.2, 0)
 		elif mt.begins_with("decor:"):
 			var di := int(mt.substr(6))
 			if di < decor_items.size():
@@ -861,6 +868,11 @@ func _walk_hover() -> void:
 		return
 	if pick.begins_with("parcel"):
 		_show_prompt("E", T("Abrir encomenda: %s") % _item_name(str(hovered_parcel.get("key", "battery"))), where)
+		return
+	if pick.begins_with("upgrade:"):
+		var un := T(str(Data.UPGRADES[pick.substr(8)]["name"]))
+		_show_prompt("G", un, where)
+		prompt_label.text = T("Mover %s") % un
 		return
 	if pick.begins_with("decor:"):
 		_show_prompt("G", T(Room.DECOR[hovered_movable.get("id", "rug")]["name"]), where)
@@ -2624,7 +2636,7 @@ func _save_game() -> void:
 	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money + pending_cash, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inv_save,
 		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount, "upgrades": upgrades, "stamina": stamina, "hunger": hunger, "decor": _decor_save(), "tools_pos": _tools_save(),
 		"expansion": expansion, "staff": _staff_save(), "staff_seq": staff_seq, "staff_first": staff_first, "candidates": candidates, "flip_offers": flip_offers,
-		"daily_goals": daily_goals, "stats": stats, "achievements": achievements, "retail": retail_save, "stand": stand_save}))
+		"daily_goals": daily_goals, "stats": stats, "achievements": achievements, "retail": retail_save, "stand": stand_save, "upgrades_pos": _upgrades_pos_save()}))
 
 
 func _has_save() -> bool:
@@ -2722,6 +2734,12 @@ func _load_game() -> bool:
 			upgrades[k] = true
 	room.clear_upgrades()
 	_apply_upgrades()
+	var upos = data.get("upgrades_pos", {})
+	if upos is Dictionary:
+		for uid in upos.keys():
+			var a3: Array = upos[uid]
+			if room.upgrade_nodes.has(uid) and a3.size() == 12:
+				(room.upgrade_nodes[uid] as Node3D).global_transform = Transform3D(Basis(Vector3(a3[0], a3[1], a3[2]), Vector3(a3[3], a3[4], a3[5]), Vector3(a3[6], a3[7], a3[8])), Vector3(a3[9], a3[10], a3[11]))
 	inventory = {}
 	var inv = data.get("inventory", {})
 	if inv is Dictionary:
@@ -3915,12 +3933,9 @@ func _apply_upgrades() -> void:
 	DeviceBase.anim_speed = _base_speed()
 	for id in upgrades.keys():
 		room.add_upgrade(id)
-	if upgrades.has("coffee") and (coffee_body == null or not is_instance_valid(coffee_body)):
-		coffee_body = Kit.static_body(self, Kit.box_shape(Vector3(0.22, 0.32, 0.26)), Vector3(1.0, Room.COUNTER_TOP + 0.15, Room.COUNTER_Z - 0.18), "coffee_machine")
-		coffee_body.collision_layer = 1
-	elif not upgrades.has("coffee") and coffee_body and is_instance_valid(coffee_body):
-		coffee_body.queue_free()
-		coffee_body = null
+	coffee_body = null
+	if upgrades.has("coffee") and room.upgrade_nodes.has("coffee"):
+		coffee_body = (room.upgrade_nodes["coffee"] as Node3D).get_meta("body")
 
 
 func _buy_upgrade(key: String) -> void:
@@ -4899,6 +4914,7 @@ func _close_popup() -> void:
 # Shop expansion, staff, used-device market, daily goals and achievements
 # =============================================================================
 const DESK_POS := Vector3(0.35, 0.0, 0.8)
+const UPGRADE_PLACE := {"screwdriver": "surface", "coffee": "surface", "speaker": "surface", "display": "floor", "neon": "wall"}
 
 
 func _set_expansion(lvl: int) -> void:
@@ -6129,3 +6145,12 @@ func _sell_product(o: Dictionary, auto: bool) -> void:
 	_stat_add("sold", 1)
 	_customer_leave(oid, "happy")
 	_refresh_objective()
+
+
+func _upgrades_pos_save() -> Dictionary:
+	var out := {}
+	for uid in room.upgrade_nodes.keys():
+		var n = room.upgrade_nodes[uid]
+		if is_instance_valid(n) and uid != "lamp":
+			out[uid] = _xf_array((n as Node3D).global_transform)
+	return out
