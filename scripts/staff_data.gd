@@ -42,6 +42,7 @@ const GOALS := [
 	{"kind": "earn", "text": "Guarda %s na caixa hoje", "min": 150, "max": 400, "reward": 0},
 	{"kind": "device", "text": "Repara um equipamento do tipo: %s", "min": 1, "max": 1, "reward": 45},
 	{"kind": "flip", "text": "Revende %d equipamento usado", "min": 1, "max": 1, "reward": 50},
+	{"kind": "sell", "text": "Vende %d produtos do expositor", "one": "Vende 1 produto do expositor", "min": 2, "max": 4, "reward": 12},
 	{"kind": "parts", "text": "Abre %d encomendas de peças", "one": "Abre 1 encomenda de peças", "min": 1, "max": 2, "reward": 15},
 ]
 
@@ -63,5 +64,8 @@ const ACHIEVEMENTS := {
 	"flip_10": {"name": "Olho para o negócio", "desc": "Revende 10 equipamentos usados.", "stat": "flips", "target": 10, "reward": 150},
 	"perfect_day": {"name": "Dia perfeito", "desc": "Cumpre as 3 metas de um dia.", "stat": "perfect_days", "target": 1, "reward": 60},
 	"vip_5": {"name": "Clientes VIP", "desc": "Entrega 5 pedidos VIP.", "stat": "vips", "target": 5, "reward": 120},
+	"shop_10": {"name": "Lojista", "desc": "Vende 10 produtos novos no expositor.", "stat": "sold", "target": 10, "reward": 60},
+	"shop_50": {"name": "Comerciante da vila", "desc": "Vende 50 produtos novos no expositor.", "stat": "sold", "target": 50, "reward": 200},
+	"story_end": {"name": "A oficina nunca fecha", "desc": "Termina a história do Avô Júlio.", "stat": "story_end", "target": 1, "reward": 300},
 	"week": {"name": "Uma semana de portas abertas", "desc": "Chega ao Dia 7.", "stat": "day", "target": 7, "reward": 70},
 }

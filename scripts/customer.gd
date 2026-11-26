@@ -64,24 +64,20 @@ func setup(cust_name: String, seed_value: int, look := {}) -> void:
 func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_style: int, extras: Array) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(display_name)
-	var skin := Kit.mat(skin_c, 0.55)
+	# toy-like look: smooth matte materials with a soft rim light, no realistic textures
+	var skin := Kit.mat(skin_c, 0.65)
 	skin.rim_enabled = true
-	skin.rim = 0.2
-	skin.rim_tint = 0.4
-	skin.subsurf_scatter_enabled = true
-	skin.subsurf_scatter_strength = 0.25
-	skin.normal_enabled = true
-	skin.normal_texture = Kit.noise_tex(0.9, true, 1.5, 256)
-	skin.normal_scale = 0.12
-	skin.uv1_scale = Vector3(6, 6, 6)
-	skin.uv1_triplanar = true
-	var shirt := Kit.fabric(shirt_c, 0.9, 0.3, 14.0)
-	var pants := Kit.fabric(pants_c, 0.92, 0.45, 16.0)
+	skin.rim = 0.18
+	skin.rim_tint = 0.5
+	var shirt := Kit.mat(shirt_c, 0.8)
+	shirt.rim_enabled = true
+	shirt.rim = 0.25
+	var pants := Kit.mat(pants_c, 0.85)
 	var shoe := Kit.mat(Color("221d1a") if rng.randf() < 0.6 else Color("e8e8e8"), 0.45)
 	var sole := Kit.mat(Color("efefef"), 0.6)
-	var hair := Kit.fabric(hair_c, 0.65, 0.35, 60.0)
-	hair.anisotropy_enabled = true
-	hair.anisotropy = 0.5
+	var hair := Kit.mat(hair_c, 0.55)
+	hair.rim_enabled = true
+	hair.rim = 0.3
 	var wide := rng.randf_range(0.92, 1.08)         # shoulder width variation
 	var hipw := rng.randf_range(0.94, 1.1)
 	var long_sleeves := rng.randf() < 0.5
@@ -89,7 +85,7 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	if extras.has("apron") or extras.has("beard"):
 		outfit = 0
 	var tee_c: Color = [Color("f4f1ea"), Color("2b2f36"), Color("e9c46a"), Color("8ecae6")][rng.randi() % 4]
-	var tee := Kit.fabric(tee_c, 0.9, 0.3, 14.0)
+	var tee := Kit.mat(tee_c, 0.8)
 	if outfit != 0:
 		long_sleeves = true
 	hips = Node3D.new()
@@ -100,6 +96,7 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 		var leg := Node3D.new()
 		leg.position = Vector3(side * 0.085 * hipw, -0.02, 0)
 		hips.add_child(leg)
+		leg.scale = Vector3(1.18, 1.0, 1.18)
 		Kit.lathe(leg, [Vector3(-0.45, 0.05, 0.053), Vector3(-0.36, 0.057, 0.06), Vector3(-0.2, 0.068, 0.072), Vector3(-0.06, 0.08, 0.083), Vector3(0.02, 0.078, 0.08)], pants, Vector3.ZERO, Vector3.ZERO, 18)
 		var knee := Node3D.new()
 		knee.name = "Knee"
@@ -178,55 +175,60 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 			arm_r = arm
 	# --- head
 	head = Node3D.new()
-	head.position = Vector3(0, 0.615, 0.008)
+	head.position = Vector3(0, 0.6, 0.008)
+	head.scale = Vector3(1.55, 1.36, 1.5)
 	torso.add_child(head)
-	var skull := Kit.lathe(head, [Vector3(0.0, 0.035, 0.03), Vector3(0.012, 0.055, 0.058), Vector3(0.04, 0.072, 0.08), Vector3(0.085, 0.083, 0.092), Vector3(0.14, 0.088, 0.098), Vector3(0.19, 0.086, 0.096), Vector3(0.225, 0.072, 0.083), Vector3(0.25, 0.048, 0.058), Vector3(0.262, 0.018, 0.022), Vector3(0.265, 0.0, 0.0)], skin, Vector3.ZERO, Vector3.ZERO, 28, [0.012, 0.012, 0.01, 0.006, 0.0, -0.004, -0.006, -0.008, -0.008, -0.008])
+	var skull := Kit.lathe(head, [Vector3(0.0, 0.05, 0.045), Vector3(0.012, 0.07, 0.07), Vector3(0.04, 0.083, 0.088), Vector3(0.085, 0.083, 0.092), Vector3(0.14, 0.088, 0.098), Vector3(0.19, 0.086, 0.096), Vector3(0.225, 0.072, 0.083), Vector3(0.25, 0.048, 0.058), Vector3(0.262, 0.018, 0.022), Vector3(0.265, 0.0, 0.0)], skin, Vector3.ZERO, Vector3.ZERO, 28, [0.012, 0.012, 0.01, 0.006, 0.0, -0.004, -0.006, -0.008, -0.008, -0.008])
 	skull.name = "Skull"
 	# ears
 	for side in [-1.0, 1.0]:
 		var ear := Kit.sphere(head, 0.024, skin, Vector3(side * 0.088, 0.135, -0.005), Vector3(0.35, 1.0, 0.7))
 		ear.rotation.y = side * 0.3
 	# eyes with iris, pupil and eyelids (blink)
-	var iris_c: Color = [Color("4b3621"), Color("2e6f9e"), Color("4f7942"), Color("6b4f2a"), Color("1e1e1e")][rng.randi() % 5]
-	var white := Kit.mat(Color("f7f4ef"), 0.25)
-	white.clearcoat_enabled = true
-	white.clearcoat = 0.8
-	var iris := Kit.mat(iris_c, 0.2)
-	var pupil := Kit.mat(Color("070707"), 0.1)
+	var iris_c: Color = [Color("6b4423"), Color("2e86de"), Color("27ae60"), Color("8e5b2a"), Color("2d3436")][rng.randi() % 5]
+	var white := Kit.mat(Color("ffffff"), 0.2)
+	var iris := Kit.mat(iris_c, 0.25)
+	var pupil := Kit.mat(Color("0b0b0b"), 0.15)
+	var shine := Kit.emissive(Color("ffffff"), 1.5, true)
 	eyelids.clear()
 	for side in [-1.0, 1.0]:
 		var eye := Node3D.new()
-		eye.position = Vector3(side * 0.034, 0.145, 0.08)
+		eye.position = Vector3(side * 0.039, 0.138, 0.084)
 		head.add_child(eye)
-		Kit.sphere(head, 0.02, Kit.mat(skin_c.darkened(0.12), 0.6), Vector3(side * 0.034, 0.145, 0.074), Vector3(1.15, 0.85, 0.6))
-		Kit.sphere(eye, 0.0145, white, Vector3.ZERO)
-		Kit.cyl(eye, 0.0075, 0.002, iris, Vector3(0, 0, 0.0132), Vector3(90, 0, 0), -1.0, 20)
-		Kit.cyl(eye, 0.0036, 0.0022, pupil, Vector3(0, 0, 0.0138), Vector3(90, 0, 0), -1.0, 16)
+		Kit.sphere(eye, 0.021, white, Vector3.ZERO, Vector3(0.95, 1.18, 0.56))
+		Kit.cyl(eye, 0.0125, 0.002, iris, Vector3(0, -0.002, 0.0112), Vector3(90, 0, 0), -1.0, 24)
+		Kit.cyl(eye, 0.0072, 0.0022, pupil, Vector3(0, -0.002, 0.0118), Vector3(90, 0, 0), -1.0, 20)
+		Kit.sphere(eye, 0.0034, shine, Vector3(side * -0.004 + 0.002, 0.004, 0.0128))
+		Kit.sphere(eye, 0.0017, shine, Vector3(-0.004, -0.006, 0.0128))
 		var lid := Node3D.new()
-		lid.position = Vector3(0, 0.0, 0.0)
 		eye.add_child(lid)
-		var lid_mesh := Kit.sphere(lid, 0.0158, skin, Vector3(0, 0.0, 0.0), Vector3(1.0, 1.0, 1.0))
-		lid_mesh.position = Vector3(0, 0.0105, 0.002)
-		lid_mesh.scale = Vector3(1.05, 0.55, 1.0)
-		var lash := Kit.capsule(lid, 0.0012, 0.026, Kit.mat(Color("15100c"), 0.5), Vector3(0, 0.0095, 0.0135), Vector3(0, 0, 90))
-		lash.rotation_degrees.x = -25.0
+		var lid_mesh := Kit.sphere(lid, 0.0225, skin, Vector3.ZERO)
+		lid_mesh.position = Vector3(0, 0.027, 0.001)
+		lid_mesh.scale = Vector3(0.98, 0.5, 0.62)
+		var lash := Kit.capsule(lid, 0.0014, 0.03, Kit.mat(Color("15100c"), 0.5), Vector3(0, 0.0205, 0.0095), Vector3(0, 0, 90))
+		lash.rotation_degrees.x = -20.0
 		eyelids.append(lid)
 		var brow := Node3D.new()
-		brow.position = Vector3(side * 0.036, 0.168, 0.091)
+		brow.position = Vector3(side * 0.038, 0.176, 0.09)
 		head.add_child(brow)
-		var bm := Kit.capsule(brow, 0.0042, 0.034, hair, Vector3.ZERO, Vector3(0, 0, 90))
+		var bm := Kit.capsule(brow, 0.0055, 0.034, hair, Vector3.ZERO, Vector3(0, 0, 90))
 		bm.rotation_degrees.z = 90 + side * 6.0
 		if side < 0:
 			brow_l = brow
 		else:
 			brow_r = brow
 	# nose
-	Kit.lathe(head, [Vector3(0.105, 0.016, 0.012), Vector3(0.12, 0.012, 0.012), Vector3(0.15, 0.008, 0.008), Vector3(0.155, 0.0, 0.0)], skin, Vector3.ZERO, Vector3.ZERO, 12, [0.104, 0.106, 0.1, 0.098])
-	Kit.sphere(head, 0.013, skin, Vector3(0, 0.112, 0.104), Vector3(1.2, 0.85, 0.9))
-	# lips
-	var lip := Kit.mat(skin_c.lerp(Color("b5524a"), 0.45), 0.4)
-	mouth = Kit.capsule(head, 0.0045, 0.034, lip, Vector3(0, 0.083, 0.094), Vector3(0, 0, 90))
-	Kit.capsule(head, 0.0042, 0.03, lip, Vector3(0, 0.077, 0.091), Vector3(0, 0, 90))
+	Kit.sphere(head, 0.0125, Kit.mat(skin_c.darkened(0.05), 0.6), Vector3(0, 0.116, 0.1), Vector3(1.15, 0.95, 0.95))
+	# rosy cheeks
+	var blush := Kit.mat(skin_c.lerp(Color("ff7b8a"), 0.4), 0.8)
+	for side in [-1.0, 1.0]:
+		Kit.sphere(head, 0.014, blush, Vector3(side * 0.056, 0.113, 0.077), Vector3(1.0, 0.62, 0.42))
+	# simple smiling mouth
+	var lip := Kit.mat(Color("7a2e2e"), 0.5)
+	mouth = Kit.capsule(head, 0.0042, 0.03, lip, Vector3(0, 0.086, 0.092), Vector3(0, 0, 90))
+	for side in [-1.0, 1.0]:
+		var corner := Kit.capsule(head, 0.0038, 0.012, lip, Vector3(side * 0.016, 0.089, 0.089), Vector3(0, 0, 90))
+		corner.rotation_degrees.z = 90 - side * 35.0
 	# hair
 	match hair_style:
 		0:   # short
@@ -252,8 +254,6 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 			var y := rng.randf_range(0.17, 0.27)
 			var r := sqrt(maxf(0.0, 1.0 - pow((y - 0.15) / 0.13, 2))) * 0.1
 			Kit.sphere(head, 0.028, hair, Vector3(cos(a) * r, y, sin(a) * r * 1.05 - 0.01))
-	for side in [-1.0, 1.0]:
-		Kit.box(head, Vector3(0.008, 0.035, 0.014), hair, Vector3(side * 0.087, 0.15, 0.02))
 	if "glasses" in extras:
 		var frame := Kit.mat(Color("1b1b1b"), 0.3, 0.3)
 		for side in [-1.0, 1.0]:
@@ -283,7 +283,7 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	name_tag.outline_size = 10
 	name_tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	name_tag.no_depth_test = true
-	name_tag.position = Vector3(0, 1.88, 0)
+	name_tag.position = Vector3(0, 2.02, 0)
 	name_tag.modulate = Color("eef3f8")
 	add_child(name_tag)
 	bubble = Label3D.new()
@@ -293,7 +293,7 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 	bubble.outline_modulate = Color(0, 0, 0, 0.8)
 	bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	bubble.no_depth_test = true
-	bubble.position = Vector3(0, 2.02, 0)
+	bubble.position = Vector3(0, 2.18, 0)
 	add_child(bubble)
 	set_bubble("")
 	# pick shape
@@ -305,6 +305,7 @@ func _build(skin_c: Color, hair_c: Color, shirt_c: Color, pants_c: Color, hair_s
 func _hand(parent: Node3D, pos: Vector3, skin: Material, side: float) -> void:
 	var h := Node3D.new()
 	h.position = pos
+	h.scale = Vector3.ONE * 1.3
 	parent.add_child(h)
 	Kit.slab(h, Vector3(0.07, 0.024, 0.08), 0.02, 0.01, skin, skin, skin, Vector3(0, -0.035, 0), Vector3(90, 0, 0))
 	for i in range(4):
@@ -330,6 +331,9 @@ func set_bubble(kind: String) -> void:
 		"ok":
 			bubble.text = "✓"
 			bubble.modulate = Color("2ecc71")
+		"buy":
+			bubble.text = "€"
+			bubble.modulate = Color("7bed9f")
 		"talk":
 			bubble.text = "…"
 			bubble.modulate = Color("eef3f8")
@@ -449,7 +453,7 @@ func _process(delta: float) -> void:
 	if blink_t < 0.0:
 		blink_t = randf_range(2.0, 5.0)
 	for lid in eyelids:
-		(lid as Node3D).rotation.x = lerpf(0.0, 1.2, lid_s)
+		(lid as Node3D).rotation.x = lerpf(0.0, 1.5, lid_s)
 	# head looks at the player while waiting
 	if look_enabled and not walking:
 		var local := to_local(look_target)
@@ -458,4 +462,4 @@ func _process(delta: float) -> void:
 	else:
 		head.rotation.y = lerp_angle(head.rotation.y, 0.0, minf(1.0, delta * 5.0))
 	if bubble.visible:
-		bubble.position.y = 2.02 + sin(t * 3.0) * 0.03
+		bubble.position.y = 2.18 + sin(t * 3.0) * 0.03

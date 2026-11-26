@@ -21,6 +21,19 @@ const UPGRADES := {
 	"neon": {"name": "Néon «Reparações» na montra", "desc": "Atrai quem passa: mais clientes por dia.", "price": 160},
 }
 
+## New products to resell on the shop's display stand (bought online in packs).
+const PACK := 4
+const PRODUCTS := {
+	"earbuds": {"name": "Auriculares sem fios", "buy": 22, "sell": 45, "color": Color("ecf0f1"), "band": Color("3498db"), "size": Vector3(0.09, 0.12, 0.05)},
+	"charger": {"name": "Carregador rápido USB-C", "buy": 7, "sell": 18, "color": Color("2c3e50"), "band": Color("f1c40f"), "size": Vector3(0.07, 0.1, 0.04)},
+	"case": {"name": "Capa de telemóvel", "buy": 4, "sell": 14, "color": Color("e84393"), "band": Color("fd79a8"), "size": Vector3(0.08, 0.15, 0.02)},
+	"powerbank": {"name": "Power bank 10000 mAh", "buy": 14, "sell": 32, "color": Color("2d3436"), "band": Color("00b894"), "size": Vector3(0.08, 0.13, 0.035)},
+	"pad_new": {"name": "Comando novo", "buy": 30, "sell": 59, "color": Color("1e272e"), "band": Color("e74c3c"), "size": Vector3(0.16, 0.12, 0.07)},
+	"mouse": {"name": "Rato gaming", "buy": 16, "sell": 36, "color": Color("130f40"), "band": Color("6c5ce7"), "size": Vector3(0.09, 0.13, 0.06)},
+	"speaker": {"name": "Coluna Bluetooth", "buy": 20, "sell": 44, "color": Color("d35400"), "band": Color("f39c12"), "size": Vector3(0.1, 0.1, 0.1)},
+	"hdmi": {"name": "Cabo HDMI 2 m", "buy": 3, "sell": 11, "color": Color("dfe6e9"), "band": Color("0984e3"), "size": Vector3(0.08, 0.14, 0.03)},
+}
+
 ## Bench footprint: L = large (needs a big spot), S = small
 const SIZE := {"laptop": "L", "console": "L", "radio": "L", "rotary": "L", "phone": "S", "handheld": "S", "gamepad": "S"}
 

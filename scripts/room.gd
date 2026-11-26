@@ -42,6 +42,7 @@ var annex_blockers: Node3D
 var annex_root: Node3D
 var annex2_root: Node3D
 var pickup2_root: Node3D
+var expansion_bodies: Array = []   # [StaticBody3D, level] surfaces only active once built
 var staff_stations: Array = []     # {"top": Vector3 device spot, "stand": Vector3, "yaw": float, "label": Label3D, "level": int}
 var rng := RandomNumberGenerator.new()
 
@@ -74,6 +75,9 @@ func build(parent: Node3D) -> Node3D:
 	_back_room()
 	_annex()
 	_pickup_shelf2()
+	_extra_surfaces()
+	_retail_stand()
+	set_expansion(0)
 	return root
 
 
@@ -883,6 +887,9 @@ func relabel() -> void:
 		(receive_shelf.get_meta("sign") as Label3D).text = I18n.t("RECEÇÃO")
 	if pickup_shelf:
 		(pickup_shelf.get_meta("sign") as Label3D).text = I18n.t("PRONTOS A ENTREGAR")
+	if stand_root:
+		(stand_root.get_node("StandSign") as Label3D).text = I18n.t("NOVIDADES")
+		(stand_root.get_node("StandHint") as Label3D).text = I18n.t("Produtos novos  •  Paga no balcão")
 	if annex_root:
 		(annex_root.get_node("AnnexSign") as Label3D).text = I18n.t("OFICINA TÉCNICA")
 		(annex_root.get_node("TeamBoard") as Label3D).text = I18n.t("EQUIPA")
@@ -1018,6 +1025,7 @@ func _shelf_unit(pos: Vector3, yaw: float, width: float, levels: Array, sign_tex
 			Kit.box(n, Vector3(0.03, 1.5, 0.03), steel, Vector3(x, 0.75, dz))
 	for y in levels:
 		Kit.box(n, Vector3(width + 0.04, 0.025, 0.4), wood, Vector3(0, y, 0))
+		surface(n, Vector3(width + 0.04, 0.025, 0.4), Vector3(0, y, 0), 2 if parent == pickup2_root and parent != null else 0)
 	var l := Label3D.new()
 	l.text = sign_text
 	l.font_size = 64
@@ -1478,6 +1486,7 @@ func _staff_bench(pos: Vector3, yaw: float, parent: Node3D, lvl: int) -> void:
 	var wood := Kit.pbr("walnut_pbr", 0.55, 0.0, Color("d0a070"), Vector3(2, 2, 2), true)
 	var steel := Kit.mat(Color("3a424c"), 0.45, 0.7)
 	Kit.slab(n, Vector3(1.2, 0.04, 0.62), 0.01, 0.006, wood, wood, wood, Vector3(0, BENCH_Y - 0.02, 0))
+	surface(n, Vector3(1.2, 0.04, 0.62), Vector3(0, BENCH_Y - 0.02, 0), lvl)
 	for x in [-0.56, 0.56]:
 		for z in [-0.26, 0.26]:
 			Kit.box(n, Vector3(0.04, BENCH_Y - 0.04, 0.04), steel, Vector3(x, (BENCH_Y - 0.04) * 0.5, z))
@@ -1519,6 +1528,9 @@ func _staff_bench(pos: Vector3, yaw: float, parent: Node3D, lvl: int) -> void:
 
 
 func set_expansion(lvl: int) -> void:
+	for eb in expansion_bodies:
+		if is_instance_valid(eb[0]):
+			(eb[0] as StaticBody3D).collision_layer = 2 if lvl >= int(eb[1]) else 0
 	annex_root.visible = lvl >= 1
 	annex2_root.visible = lvl >= 2
 	annex_blockers.visible = lvl < 1
@@ -1547,3 +1559,83 @@ func _pickup_shelf2() -> void:
 			tag.position = Vector3(-0.25 + k * 0.5, y - 0.04, 0.21)
 			n.add_child(tag)
 	pickup2_root.visible = false
+
+
+## Flat surface the player can put things on (collision layer 2).
+func surface(parent: Node3D, size: Vector3, pos: Vector3, lvl := 0) -> StaticBody3D:
+	var b := Kit.static_body(parent, Kit.box_shape(size), pos)
+	b.collision_layer = 2
+	if lvl > 0:
+		expansion_bodies.append([b, lvl])
+	return b
+
+
+func _extra_surfaces() -> void:
+	# steel shelving unit, tool chests, window sill, back room fridge + crate
+	for y in [0.35, 0.85, 1.35, 1.85]:
+		surface(root, Vector3(0.99, 0.025, 0.44), Vector3(-1.775, y, ROOM_BACK + 0.24))
+	for x in [-1.48, 1.62]:
+		surface(root, Vector3(0.62, 0.02, 0.52), Vector3(x, 0.95, -1.47))
+	surface(root, Vector3(1.22, 0.03, 0.2), Vector3(1.8, 1.135, ROOM_BACK + 0.05))
+	surface(root, Vector3(0.55, 0.02, 0.55), fridge_pos + Vector3(0, 0.86, 0))
+	surface(root, Vector3(0.5, 0.02, 0.4), kettle_pos + Vector3(0, 0.45, 0))
+
+
+# -----------------------------------------------------------------------------
+# Display stand for new products (front-left corner, customers browse it)
+# -----------------------------------------------------------------------------
+const STAND_POS := Vector3(-1.55, 0.0, 2.38)
+const STAND_BROWSE := Vector3(-1.55, 0.0, 1.88)
+var stand_slots: Array[Vector3] = []
+var stand_root: Node3D
+
+
+func _retail_stand() -> void:
+	stand_root = Node3D.new()
+	stand_root.name = "Stand"
+	stand_root.position = STAND_POS
+	stand_root.rotation_degrees.y = 180.0
+	root.add_child(stand_root)
+	var wood := Kit.pbr("walnut_pbr", 0.5, 0.0, Color("f1e6d6"), Vector3(2, 2, 2), true)
+	var trim := Kit.mat(Color("2d3436"), 0.4, 0.5)
+	Kit.slab(stand_root, Vector3(1.4, 0.72, 0.42), 0.02, 0.01, wood, null, null, Vector3(0, 0.36, 0), Vector3(90, 0, 0))
+	Kit.box(stand_root, Vector3(1.42, 0.03, 0.44), trim, Vector3(0, 0.735, 0))
+	# glass box with a mid shelf + LED strip
+	var glass := Kit.glass(Color(0.85, 0.95, 1.0), 0.02, 0.06)
+	Kit.box(stand_root, Vector3(1.36, 0.006, 0.38), glass, Vector3(0, 1.12, 0))
+	Kit.box(stand_root, Vector3(1.36, 0.006, 0.38), glass, Vector3(0, 1.5, 0))
+	Kit.box(stand_root, Vector3(1.36, 0.76, 0.006), glass, Vector3(0, 1.13, -0.19))
+	for x in [-0.69, 0.69]:
+		Kit.box(stand_root, Vector3(0.02, 0.78, 0.4), trim, Vector3(x, 1.13, 0))
+	Kit.box(stand_root, Vector3(1.3, 0.008, 0.012), Kit.emissive(Color("fff3d6"), 3.0, true), Vector3(0, 1.49, 0.17))
+	var l := OmniLight3D.new()
+	l.position = Vector3(0, 1.4, 0.3)
+	l.light_color = Color("fff1d0")
+	l.light_energy = 0.9
+	l.omni_range = 1.4
+	stand_root.add_child(l)
+	var sign := Label3D.new()
+	sign.name = "StandSign"
+	sign.text = I18n.t("NOVIDADES")
+	sign.font_size = 56
+	sign.pixel_size = 0.0011
+	sign.modulate = Color("e74c3c")
+	sign.outline_size = 8
+	sign.position = Vector3(0, 1.62, 0.0)
+	var f := load("res://assets/fonts/Nunito-ExtraBold.ttf")
+	if f:
+		sign.font = f
+	stand_root.add_child(sign)
+	var price_tag := Label3D.new()
+	price_tag.name = "StandHint"
+	price_tag.text = I18n.t("Produtos novos  •  Paga no balcão")
+	price_tag.font_size = 28
+	price_tag.pixel_size = 0.0009
+	price_tag.modulate = Color("2d3436")
+	price_tag.position = Vector3(0, 0.6, 0.215)
+	stand_root.add_child(price_tag)
+	for y in [0.75, 1.125]:
+		for k in range(4):
+			stand_slots.append(stand_root.transform * Vector3(-0.51 + k * 0.34, y, 0.02))
+	var b := Kit.static_body(stand_root, Kit.box_shape(Vector3(1.42, 1.5, 0.44)), Vector3(0, 0.78, 0), "stand")
+	b.collision_layer = 1

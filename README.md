@@ -1,4 +1,4 @@
-# Fix & Flip Tech — v1.3
+# Fix & Flip Tech — v1.4
 
 Simulador de oficina de eletrónica em **Godot 4** (Forward+). Compra equipamentos avariados, repara-os passo a passo com as mãos (de luva) e ferramentas reais, e revende com lucro.
 
@@ -60,6 +60,20 @@ Os clientes entram pela porta da loja, fazem fila no balcão e esperam com um **
 - **Clientes calmos no início**: nos primeiros capítulos só há um trabalho de cada vez, e o cliente seguinte chega depois de entregares.
 - **Personagens mais realistas**: corpo com proporções humanas, joelhos e cotovelos, mãos com dedos, rosto com nariz, orelhas, íris colorida, pestanas e piscar de olhos, e roupa variada (camisa, hoodie, casaco).
 
+## Novidades v1.4
+
+- **História muito mais longa (10 capítulos)**. Depois do portátil do avô:
+  - *A Concorrência*: a MegaFix abre na vila e manda um cliente espião testar-te.
+  - *Não Estás Sozinho*: contratas a tua primeira pessoa.
+  - *O Rádio da Avó Lurdes*: há uma gravação escondida dentro do rádio.
+  - *O Prédio*: tens de juntar 3000 € antes que a MegaFix o compre. Depois disso acabam as rendas.
+  - *A Feira da Reparação*: desafio de 5 entregas num só dia.
+  - *O Telefone do Vítor*: o final.
+- **Passar trabalho a um técnico**: na bancada (tecla **T**, a olhar para o equipamento ou durante a reparação) ou nos Pedidos (botão «Passar a Ana ×1.7»). O técnico continua a partir do passo em que ficaste.
+- **Expositor «NOVIDADES»**: compras produtos novos na loja online (separador Mercado), como auriculares, carregadores, capas, power banks, comandos, ratos, colunas e cabos. Chegam pelo carteiro e vão para o expositor junto à montra. Os clientes vêm ver, escolhem e pagam no balcão (ou ao balconista). Carrega E no expositor para o repor com o que tens em armazém.
+- **Personagens em estilo boneco**: cabeça maior e redonda, olhos grandes com brilho, bochechas rosadas, mãos e pernas mais robustas e cores lisas.
+- **Pousar as coisas onde quiseres** (tecla G): ferramentas e decorações vão para qualquer superfície (bancada, balcão, prateleiras, armários, parapeito, frigorífico, bancadas do anexo) ou para o chão. Os equipamentos podem ir para qualquer superfície.
+
 ## Novidades v1.3 — A oficina cresce
 
 - **Expansão da loja (separador Equipa, tecla F)**:
@@ -112,7 +126,8 @@ Português e English: Definições → Idioma / Language.
 | Clique esquerdo | Usar ferramenta / mão no ponto assinalado |
 | Clique direito + arrastar | Rodar a vista (na reparação) |
 | Roda do rato | Zoom (na reparação) |
-| G | Pegar e mover um objeto (arrumar a oficina) |
+| G | Pegar e mover um objeto para qualquer superfície ou para o chão |
+| T | Passar o equipamento da bancada a um técnico |
 | R / roda do rato | Rodar o objeto que estás a mover |
 | E (no banco, saco-cama, frigorífico, café, campainha) | Sentar, dormir, comer, beber, tocar |
 | Esc | Voltar / pausa (com definições) |
