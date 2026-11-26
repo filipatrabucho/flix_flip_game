@@ -15,6 +15,12 @@ const I18n = preload("res://scripts/i18n.gd")
 const COUNTER_Z := 1.55
 const COUNTER_TOP := 1.02
 const DOOR_X := 2.0
+const ANNEX_DOOR_Z0 := -0.95
+const ANNEX_DOOR_Z1 := -0.15
+const ANNEX_X0 := 2.7
+const ANNEX_X1 := 5.8
+const ANNEX_Z0 := -1.75
+const ANNEX_Z1 := 1.5
 
 var root: Node3D
 var env: Environment
@@ -32,6 +38,11 @@ var register_screen: Label3D
 var receive_shelf: Node3D
 var pickup_shelf: Node3D
 var tablet_label: Label3D
+var annex_blockers: Node3D
+var annex_root: Node3D
+var annex2_root: Node3D
+var pickup2_root: Node3D
+var staff_stations: Array = []     # {"top": Vector3 device spot, "stand": Vector3, "yaw": float, "label": Label3D, "level": int}
 var rng := RandomNumberGenerator.new()
 
 
@@ -41,6 +52,9 @@ func build(parent: Node3D) -> Node3D:
 	root.name = "Workshop"
 	parent.add_child(root)
 	_environment()
+	annex_blockers = Node3D.new()
+	annex_blockers.name = "AnnexBlockers"
+	root.add_child(annex_blockers)
 	_shell()
 	_window()
 	_bench()
@@ -58,6 +72,8 @@ func build(parent: Node3D) -> Node3D:
 	_receiving()
 	_pickup_shelf()
 	_back_room()
+	_annex()
+	_pickup_shelf2()
 	return root
 
 
@@ -139,7 +155,12 @@ func _shell() -> void:
 	Kit.box(root, Vector3(0.1, ROOM_H, 0.6), wall, Vector3(lx, ROOM_H * 0.5, ROOM_BACK + 0.3))
 	Kit.box(root, Vector3(0.1, ROOM_H, ROOM_FRONT + 0.35), wall, Vector3(lx, ROOM_H * 0.5, -0.35 + (ROOM_FRONT + 0.35) * 0.5))
 	Kit.box(root, Vector3(0.1, ROOM_H - 2.1, 0.8), wall, Vector3(lx, 2.1 + (ROOM_H - 2.1) * 0.5, -0.75))
-	Kit.box(root, Vector3(0.1, ROOM_H, ROOM_FRONT - ROOM_BACK), wall, Vector3(ROOM_X + 0.05, ROOM_H * 0.5, (ROOM_FRONT + ROOM_BACK) * 0.5))
+	# right wall: a doorway to the technicians' annex (z ANNEX_DOOR_Z0..Z1), bricked up until the expansion is bought
+	var rx := ROOM_X + 0.05
+	Kit.box(root, Vector3(0.1, ROOM_H, ANNEX_DOOR_Z0 - ROOM_BACK), wall, Vector3(rx, ROOM_H * 0.5, (ANNEX_DOOR_Z0 + ROOM_BACK) * 0.5))
+	Kit.box(root, Vector3(0.1, ROOM_H, ROOM_FRONT - ANNEX_DOOR_Z1), wall, Vector3(rx, ROOM_H * 0.5, (ROOM_FRONT + ANNEX_DOOR_Z1) * 0.5))
+	Kit.box(root, Vector3(0.1, ROOM_H - 2.1, ANNEX_DOOR_Z1 - ANNEX_DOOR_Z0), wall, Vector3(rx, 2.1 + (ROOM_H - 2.1) * 0.5, (ANNEX_DOOR_Z0 + ANNEX_DOOR_Z1) * 0.5))
+	Kit.box(annex_blockers, Vector3(0.1, 2.1, ANNEX_DOOR_Z1 - ANNEX_DOOR_Z0), wall, Vector3(rx, 1.05, (ANNEX_DOOR_Z0 + ANNEX_DOOR_Z1) * 0.5))
 	# front wall with the shop door (x 1.55..2.45, h 2.1)
 	var fz := ROOM_FRONT + 0.05
 	Kit.box(root, Vector3(4.15, ROOM_H, 0.1), wall, Vector3(-0.525, ROOM_H * 0.5, fz))
@@ -151,7 +172,9 @@ func _shell() -> void:
 	var skirt := Kit.mat(Color("1d2633"), 0.6)
 	Kit.box(root, Vector3(ROOM_X * 2.0, 0.08, 0.015), skirt, Vector3(0, 0.04, ROOM_BACK + 0.008))
 	Kit.box(root, Vector3(0.015, 0.08, ROOM_FRONT + 0.35), skirt, Vector3(-ROOM_X + 0.008, 0.04, -0.35 + (ROOM_FRONT + 0.35) * 0.5))
-	Kit.box(root, Vector3(0.015, 0.08, ROOM_FRONT - ROOM_BACK), skirt, Vector3(ROOM_X - 0.008, 0.04, (ROOM_FRONT + ROOM_BACK) * 0.5))
+	Kit.box(root, Vector3(0.015, 0.08, ANNEX_DOOR_Z0 - ROOM_BACK), skirt, Vector3(ROOM_X - 0.008, 0.04, (ANNEX_DOOR_Z0 + ROOM_BACK) * 0.5))
+	Kit.box(root, Vector3(0.015, 0.08, ROOM_FRONT - ANNEX_DOOR_Z1), skirt, Vector3(ROOM_X - 0.008, 0.04, (ROOM_FRONT + ANNEX_DOOR_Z1) * 0.5))
+	Kit.box(annex_blockers, Vector3(0.015, 0.08, ANNEX_DOOR_Z1 - ANNEX_DOOR_Z0), skirt, Vector3(ROOM_X - 0.008, 0.04, (ANNEX_DOOR_Z0 + ANNEX_DOOR_Z1) * 0.5))
 	# exposed conduit along the back wall
 	var conduit := Kit.mat(Color("6c7681"), 0.4, 0.8)
 	Kit.cyl(root, 0.012, ROOM_X * 2.0, conduit, Vector3(0, 2.62, ROOM_BACK + 0.03), Vector3(0, 0, 90))
@@ -401,10 +424,12 @@ func _bin(pos: Vector3, color: Color) -> void:
 	Kit.box(root, Vector3(0.1, 0.04, 0.003), Kit.plastic(Color("f5f6fa"), 0.6), pos + Vector3(0, 0.09, 0.182))
 
 
-func _cardboard(pos: Vector3, size: Vector3) -> void:
+func _cardboard(pos: Vector3, size: Vector3, parent: Node3D = null) -> void:
+	if parent == null:
+		parent = root
 	var c := Kit.plastic(Color("b98b55"), 0.9, 0.3)
-	Kit.slab(root, size, 0.004, 0.003, c, null, null, pos + Vector3(0, size.y * 0.5, 0), Vector3(0, rng.randf_range(-6, 6), 0))
-	Kit.box(root, Vector3(size.x + 0.002, 0.004, 0.05), Kit.plastic(Color("c9a26f"), 0.4), pos + Vector3(0, size.y + 0.001, 0))
+	Kit.slab(parent, size, 0.004, 0.003, c, null, null, pos + Vector3(0, size.y * 0.5, 0), Vector3(0, rng.randf_range(-6, 6), 0))
+	Kit.box(parent, Vector3(size.x + 0.002, 0.004, 0.05), Kit.plastic(Color("c9a26f"), 0.4), pos + Vector3(0, size.y + 0.001, 0))
 
 
 func _cabinets() -> void:
@@ -526,12 +551,12 @@ func _plants() -> void:
 	_bush(bp + Vector3(0, 0.075, 0), 0.05, 14, leaf_mesh, leaf_mats)
 	# floor plant in the corner
 	var fp := Vector3(2.25, 0, -0.22)
-	Kit.cyl(root, 0.18, 0.4, Kit.mat(Color("2b2f36"), 0.5), fp + Vector3(0, 0.2, 0), Vector3.ZERO, 0.14)
+	Kit.cyl(annex_blockers, 0.18, 0.4, Kit.mat(Color("2b2f36"), 0.5), fp + Vector3(0, 0.2, 0), Vector3.ZERO, 0.14)
 	for i in range(9):
 		var a := TAU * i / 9.0
 		var stem_top := fp + Vector3(cos(a) * 0.25, 0.9 + rng.randf() * 0.5, sin(a) * 0.25)
-		Kit.mi(root, Kit.tube_mesh(Kit.bezier(fp + Vector3(0, 0.4, 0), fp + Vector3(cos(a) * 0.05, 0.7, sin(a) * 0.05), stem_top - Vector3(cos(a) * 0.1, 0.1, sin(a) * 0.1), stem_top, 10), 0.006, 6), Kit.mat(Color("4a6b2f"), 0.7))
-		var big := Kit.mi(root, Kit.leaf_mesh(0.32, 0.24, 0.2), leaf_mats[i % 3], stem_top)
+		Kit.mi(annex_blockers, Kit.tube_mesh(Kit.bezier(fp + Vector3(0, 0.4, 0), fp + Vector3(cos(a) * 0.05, 0.7, sin(a) * 0.05), stem_top - Vector3(cos(a) * 0.1, 0.1, sin(a) * 0.1), stem_top, 10), 0.006, 6), Kit.mat(Color("4a6b2f"), 0.7))
+		var big := Kit.mi(annex_blockers, Kit.leaf_mesh(0.32, 0.24, 0.2), leaf_mats[i % 3], stem_top)
 		big.look_at_from_position(stem_top, stem_top + Vector3(cos(a), -0.4, sin(a)), Vector3.UP)
 
 
@@ -625,7 +650,7 @@ func _floor_props() -> void:
 	# stack of boxes in the back right corner
 	_cardboard(Vector3(2.2, 0, -1.2), Vector3(0.45, 0.4, 0.4))
 	_cardboard(Vector3(2.18, 0.4, -1.22), Vector3(0.38, 0.32, 0.36))
-	_cardboard(Vector3(2.25, 0, -0.7), Vector3(0.4, 0.35, 0.38))
+	_cardboard(Vector3(2.25, 0, -0.62), Vector3(0.4, 0.35, 0.38), annex_blockers)
 	# small trash/recycling bin for old parts
 	Kit.cyl(root, 0.15, 0.4, Kit.plastic(Color("2e7d32"), 0.5), Vector3(-1.7, 0.2, -0.3), Vector3.ZERO, 0.13, 32)
 	Kit.cyl(root, 0.155, 0.02, Kit.plastic(Color("1b5e20"), 0.5), Vector3(-1.7, 0.41, -0.3))
@@ -858,6 +883,13 @@ func relabel() -> void:
 		(receive_shelf.get_meta("sign") as Label3D).text = I18n.t("RECEÇÃO")
 	if pickup_shelf:
 		(pickup_shelf.get_meta("sign") as Label3D).text = I18n.t("PRONTOS A ENTREGAR")
+	if annex_root:
+		(annex_root.get_node("AnnexSign") as Label3D).text = I18n.t("OFICINA TÉCNICA")
+		(annex_root.get_node("TeamBoard") as Label3D).text = I18n.t("EQUIPA")
+	if pickup2_root:
+		for c in pickup2_root.get_children():
+			if c.has_meta("sign"):
+				(c.get_meta("sign") as Label3D).text = I18n.t("PRONTOS A ENTREGAR")
 
 
 # -----------------------------------------------------------------------------
@@ -974,11 +1006,11 @@ var receive_slots: Array[Vector3] = []
 var pickup_slots: Array[Vector3] = []
 
 
-func _shelf_unit(pos: Vector3, yaw: float, width: float, levels: Array, sign_text: String, sign_color: Color) -> Node3D:
+func _shelf_unit(pos: Vector3, yaw: float, width: float, levels: Array, sign_text: String, sign_color: Color, parent: Node3D = null) -> Node3D:
 	var n := Node3D.new()
 	n.position = pos
 	n.rotation_degrees.y = yaw
-	root.add_child(n)
+	(parent if parent else root).add_child(n)
 	var steel := Kit.mat(Color("38414b"), 0.45, 0.75)
 	var wood := Kit.pbr("walnut_pbr", 0.6, 0.0, Color("b07a4e"), Vector3(2, 2, 2), true)
 	for x in [-width * 0.5, width * 0.5]:
@@ -1363,3 +1395,155 @@ func _poster(n: Node3D, id: String) -> void:
 	var q := QuadMesh.new()
 	q.size = Vector2(0.44, 0.59)
 	Kit.mi(n, q, m, Vector3(0, 0, 0.0155))
+
+
+# -----------------------------------------------------------------------------
+# Expansion: technicians' annex (through the right wall) + second pickup shelf
+# -----------------------------------------------------------------------------
+func _annex() -> void:
+	annex_root = Node3D.new()
+	annex_root.name = "Annex"
+	root.add_child(annex_root)
+	annex2_root = Node3D.new()
+	annex2_root.name = "Annex2"
+	annex_root.add_child(annex2_root)
+	var cx := (ANNEX_X0 + ANNEX_X1) * 0.5
+	var cz := (ANNEX_Z0 + ANNEX_Z1) * 0.5
+	var w := ANNEX_X1 - ANNEX_X0 + 0.1
+	var d := ANNEX_Z1 - ANNEX_Z0
+	var floor_m := Kit.pbr("concrete_pbr", 0.8, 0.0, Color("9aa0a6"), Vector3(0.6, 0.6, 0.6), true, 0.5)
+	Kit.box(annex_root, Vector3(w, 0.1, d), floor_m, Vector3(cx, -0.05, cz))
+	var wall := Kit.pbr("wall_pbr", 0.85, 0.0, Color("e2e6ea"), Vector3(0.7, 0.7, 0.7), true, 0.4)
+	Kit.box(annex_root, Vector3(w, ROOM_H, 0.1), wall, Vector3(cx, ROOM_H * 0.5, ANNEX_Z0 - 0.05))
+	Kit.box(annex_root, Vector3(w, ROOM_H, 0.1), wall, Vector3(cx, ROOM_H * 0.5, ANNEX_Z1 + 0.05))
+	Kit.box(annex_root, Vector3(0.1, ROOM_H, d), wall, Vector3(ANNEX_X1 + 0.05, ROOM_H * 0.5, cz))
+	Kit.box(annex_root, Vector3(w, 0.1, d), Kit.mat(Color("20262e"), 0.9), Vector3(cx, ROOM_H + 0.05, cz))
+	# safety stripe on the floor + ESD mat path
+	Kit.box(annex_root, Vector3(w - 0.3, 0.004, 0.06), Kit.mat(Color("f5b82e"), 0.6), Vector3(cx, 0.002, -0.72))
+	Kit.box(annex2_root, Vector3(w - 0.3, 0.004, 0.06), Kit.mat(Color("f5b82e"), 0.6), Vector3(cx, 0.002, 0.52))
+	Kit.slab(annex_root, Vector3(2.4, 0.01, 0.9), 0.03, 0.004, Kit.rubber(Color("2b4a6b")), null, null, Vector3(cx - 0.2, 0.005, -0.15))
+	# door trim
+	var trim := Kit.mat(Color("2a2f36"), 0.5, 0.3)
+	for z in [ANNEX_DOOR_Z0 - 0.02, ANNEX_DOOR_Z1 + 0.02]:
+		Kit.box(annex_root, Vector3(0.14, 2.12, 0.05), trim, Vector3(ROOM_X + 0.05, 1.06, z))
+	Kit.box(annex_root, Vector3(0.14, 0.05, ANNEX_DOOR_Z1 - ANNEX_DOOR_Z0 + 0.09), trim, Vector3(ROOM_X + 0.05, 2.12, (ANNEX_DOOR_Z0 + ANNEX_DOOR_Z1) * 0.5))
+	var sign := Label3D.new()
+	sign.name = "AnnexSign"
+	sign.text = I18n.t("OFICINA TÉCNICA")
+	sign.font_size = 40
+	sign.pixel_size = 0.0009
+	sign.modulate = Color("f5b82e")
+	sign.outline_size = 6
+	sign.position = Vector3(ROOM_X - 0.01, 2.3, (ANNEX_DOOR_Z0 + ANNEX_DOOR_Z1) * 0.5)
+	sign.rotation_degrees = Vector3(0, -90, 0)
+	annex_root.add_child(sign)
+	# ceiling light panels
+	for x in [3.5, 5.0]:
+		Kit.box(annex_root, Vector3(0.9, 0.03, 0.3), Kit.emissive(Color("f4f8ff"), 2.2), Vector3(x, ROOM_H - 0.02, -0.15))
+		var l := OmniLight3D.new()
+		l.position = Vector3(x, 2.3, -0.15)
+		l.light_color = Color("eef4ff")
+		l.light_energy = 1.4
+		l.omni_range = 3.2
+		l.shadow_enabled = x < 4.0
+		annex_root.add_child(l)
+	# parts cabinet + poster
+	var cab := Kit.mat(Color("8f1f1f"), 0.4, 0.4)
+	Kit.slab(annex_root, Vector3(0.4, 1.2, 0.5), 0.01, 0.005, cab, null, null, Vector3(5.57, 0.6, -0.3))
+	for i in range(5):
+		Kit.box(annex_root, Vector3(0.005, 0.004, 0.44), Kit.mat(Color("5c1414"), 0.5), Vector3(5.368, 0.15 + i * 0.22, -0.3))
+	var team := Label3D.new()
+	team.name = "TeamBoard"
+	team.text = I18n.t("EQUIPA")
+	team.font_size = 48
+	team.pixel_size = 0.001
+	team.modulate = Color("2c3e50")
+	team.position = Vector3(ANNEX_X1 - 0.025, 1.95, 0.75)
+	team.rotation_degrees = Vector3(0, -90, 0)
+	annex_root.add_child(team)
+	Kit.box(annex_root, Vector3(0.02, 0.8, 1.2), Kit.mat(Color("f7f3e8"), 0.8), Vector3(ANNEX_X1 - 0.012, 1.65, 0.75))
+	# staff benches: two on the back wall (expansion 1), two on the far wall (expansion 2)
+	_staff_bench(Vector3(3.4, 0, ANNEX_Z0 + 0.33), 0.0, annex_root, 1)
+	_staff_bench(Vector3(4.75, 0, ANNEX_Z0 + 0.33), 0.0, annex_root, 1)
+	_staff_bench(Vector3(3.4, 0, ANNEX_Z1 - 0.33), 180.0, annex2_root, 2)
+	_staff_bench(Vector3(4.75, 0, ANNEX_Z1 - 0.33), 180.0, annex2_root, 2)
+	set_expansion(0)
+
+
+func _staff_bench(pos: Vector3, yaw: float, parent: Node3D, lvl: int) -> void:
+	var n := Node3D.new()
+	n.position = pos
+	n.rotation_degrees.y = yaw
+	parent.add_child(n)
+	var wood := Kit.pbr("walnut_pbr", 0.55, 0.0, Color("d0a070"), Vector3(2, 2, 2), true)
+	var steel := Kit.mat(Color("3a424c"), 0.45, 0.7)
+	Kit.slab(n, Vector3(1.2, 0.04, 0.62), 0.01, 0.006, wood, wood, wood, Vector3(0, BENCH_Y - 0.02, 0))
+	for x in [-0.56, 0.56]:
+		for z in [-0.26, 0.26]:
+			Kit.box(n, Vector3(0.04, BENCH_Y - 0.04, 0.04), steel, Vector3(x, (BENCH_Y - 0.04) * 0.5, z))
+	Kit.box(n, Vector3(1.1, 0.02, 0.5), Kit.mat(Color("333a42"), 0.6, 0.4), Vector3(0, 0.18, 0))
+	Kit.slab(n, Vector3(0.62, 0.003, 0.42), 0.01, 0.001, Kit.rubber(Color("2e7d5b")), null, null, Vector3(0.05, BENCH_Y + 0.0015, 0.04))
+	# back panel with a tool strip and a small monitor
+	Kit.box(n, Vector3(1.2, 0.6, 0.02), Kit.mat(Color("566270"), 0.7), Vector3(0, BENCH_Y + 0.45, -0.3))
+	for i in range(6):
+		var c: Color = [Color("e74c3c"), Color("f1c40f"), Color("3498db"), Color("2ecc71"), Color("9b59b6"), Color("e67e22")][i]
+		Kit.cyl(n, 0.008, 0.12, Kit.plastic(c, 0.4), Vector3(-0.5 + i * 0.05, BENCH_Y + 0.5, -0.27))
+	var mon := Kit.slab(n, Vector3(0.34, 0.22, 0.02), 0.01, 0.004, Kit.black_glass(), Kit.plastic(Color("1b1e22"), 0.4), null, Vector3(0.38, BENCH_Y + 0.3, -0.2), Vector3(90, 0, 0))
+	mon.name = "Monitor"
+	Kit.box(n, Vector3(0.04, 0.16, 0.04), Kit.plastic(Color("1b1e22"), 0.4), Vector3(0.38, BENCH_Y + 0.1, -0.22))
+	var screen := Kit.box(n, Vector3(0.31, 0.19, 0.002), Kit.emissive(Color("2a8cff"), 0.8), Vector3(0.38, BENCH_Y + 0.3, -0.188))
+	screen.name = "Screen"
+	# small LED lamp
+	var lamp := SpotLight3D.new()
+	lamp.position = Vector3(0.0, BENCH_Y + 0.75, 0.05)
+	lamp.rotation_degrees = Vector3(-90, 0, 0)
+	lamp.light_color = Color("fff4e0")
+	lamp.light_energy = 1.6
+	lamp.spot_range = 1.4
+	lamp.spot_angle = 50.0
+	n.add_child(lamp)
+	Kit.box(n, Vector3(0.3, 0.02, 0.06), Kit.mat(Color("2b2f36"), 0.4, 0.6), Vector3(0.0, BENCH_Y + 0.76, 0.05))
+	# stool
+	var stool_p := n.transform * Vector3(0.0, 0, 0.62)
+	var label := Label3D.new()
+	label.font_size = 34
+	label.pixel_size = 0.0011
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.outline_size = 8
+	label.modulate = Color("f2f5f8")
+	label.position = Vector3(0, BENCH_Y + 0.9, -0.28)
+	label.text = I18n.t("Bancada livre")
+	n.add_child(label)
+	var fwd := n.transform.basis * Vector3(0, 0, 1)
+	staff_stations.append({"top": n.transform * Vector3(0.05, BENCH_Y + 0.004, 0.04), "stand": stool_p - fwd * 0.05, "yaw": atan2(-fwd.x, -fwd.z), "label": label, "level": lvl, "node": n})
+
+
+func set_expansion(lvl: int) -> void:
+	annex_root.visible = lvl >= 1
+	annex2_root.visible = lvl >= 2
+	annex_blockers.visible = lvl < 1
+	if pickup2_root:
+		pickup2_root.visible = lvl >= 2
+
+
+func _pickup_shelf2() -> void:
+	pickup2_root = Node3D.new()
+	pickup2_root.name = "Pickup2"
+	root.add_child(pickup2_root)
+	var pos := Vector3(-2.38, 0.0, 0.25)
+	var n := _shelf_unit(pos, 90.0, 1.0, [0.55, 1.05], I18n.t("PRONTOS A ENTREGAR"), Color("2ecc71"), pickup2_root)
+	var i := 4
+	for y in [1.05, 0.55]:
+		for k in range(2):
+			pickup_slots.append(pos + Basis(Vector3.UP, PI * 0.5) * Vector3(-0.25 + k * 0.5, y + 0.0125, 0.0))
+			i += 1
+			var tag := Label3D.new()
+			tag.text = "#%d" % i
+			tag.font_size = 56
+			tag.pixel_size = 0.0012
+			tag.modulate = Color("f2f5f8")
+			tag.outline_size = 8
+			tag.shaded = false
+			tag.position = Vector3(-0.25 + k * 0.5, y - 0.04, 0.21)
+			n.add_child(tag)
+	pickup2_root.visible = false

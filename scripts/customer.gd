@@ -40,6 +40,7 @@ var height := 1.0
 var eyelids: Array = []
 var cap_color := Color(0, 0, 0, 0)
 var blink_t := 2.0
+var working := false          # staff: hands busy on the bench
 
 
 func setup(cust_name: String, seed_value: int, look := {}) -> void:
@@ -431,6 +432,15 @@ func _process(delta: float) -> void:
 		arm_r.rotation.x = -0.35
 		el.rotation.x = -1.15
 		er.rotation.x = -1.15
+	elif working and not walking:
+		arm_l.rotation.x = -0.55 + sin(t * 4.2) * 0.06
+		arm_r.rotation.x = -0.6 + sin(t * 6.3 + 1.0) * 0.1
+		el.rotation.x = -1.0 + sin(t * 5.1) * 0.08
+		er.rotation.x = -0.95 + cos(t * 6.7) * 0.12
+		torso.rotation.x = 0.12
+		head.rotation.x = 0.3
+	if not working:
+		head.rotation.x = lerpf(head.rotation.x, 0.0, minf(1.0, delta * 5.0))
 	# blinking
 	blink_t -= delta
 	var lid_s := 0.0

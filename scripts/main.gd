@@ -20,6 +20,7 @@ const AudioMgr = preload("res://scripts/audio.gd")
 const Hand = preload("res://scripts/glove_hand.gd")
 const Tools = preload("res://scripts/tools3d.gd")
 const UIcon = preload("res://scripts/ui_icon.gd")
+const Staff = preload("res://scripts/staff_data.gd")
 const Radial = preload("res://scripts/radial_menu.gd")
 
 const SAVE_PATH := "user://fix_flip_save_%d.json"
@@ -199,6 +200,18 @@ var board_root: Control
 var board_box: VBoxContainer
 var board_kind := ""
 var orders_badge: Label
+var expansion := 0                 # 0 none, 1 annex, 2 full expansion
+var staff: Array = []              # hired employees
+var candidates: Array = []         # job applicants (refreshed daily)
+var staff_seq := 0
+var staff_first := true            # new jobs go to idle technicians before the player's bench
+var staff_last_min := -1.0
+var staff_nodes: Dictionary = {}   # staff id -> CustomerScene
+var flip_offers: Array = []        # used devices for sale (refreshed daily)
+var daily_goals: Array = []
+var stats: Dictionary = {}
+var achievements: Dictionary = {}
+var annex_door_body: StaticBody3D
 var meter_label: Label
 
 
@@ -622,8 +635,12 @@ func _handle_key(e: InputEventKey) -> void:
 			_stand_up()
 		return
 	if mode == "board":
-		if k == KEY_ESCAPE or (k == KEY_P and board_kind == "orders") or (k == KEY_L and board_kind == "shop") or (k == KEY_U and board_kind == "upgrades"):
+		if k == KEY_ESCAPE or (k == KEY_P and board_kind == "orders") or (k == KEY_L and board_kind == "shop") or (k == KEY_U and board_kind == "upgrades") or (k == KEY_F and board_kind == "team") or (k == KEY_M and board_kind == "goals"):
 			_close_board()
+		elif k == KEY_F:
+			_open_board("team")
+		elif k == KEY_M:
+			_open_board("goals")
 		elif k == KEY_U:
 			_open_board("upgrades")
 		elif k == KEY_P:
@@ -650,6 +667,10 @@ func _handle_key(e: InputEventKey) -> void:
 		_open_board("shop")
 	elif k == KEY_U:
 		_open_board("upgrades")
+	elif k == KEY_F:
+		_open_board("team")
+	elif k == KEY_M:
+		_open_board("goals")
 	elif k >= KEY_1 and k <= KEY_5:
 		var id: String = Tools.IDS[k - KEY_1]
 		_equip(id if tool != id else "none")
@@ -704,6 +725,11 @@ func _walk_ok(p: Vector3) -> bool:
 		in_main = false
 	var in_door := p.x >= -2.98 and p.x <= -2.2 and p.z >= -1.05 and p.z <= -0.45
 	var in_back := p.x >= -4.45 and p.x <= -2.88 and p.z >= -1.55 and p.z <= 0.42
+	if expansion >= 1:
+		var in_adoor := p.x >= 2.2 and p.x <= 2.95 and p.z >= -0.82 and p.z <= -0.28
+		var in_annex := p.x >= 2.85 and p.x <= 5.5 and p.z >= -0.78 and p.z <= (0.42 if expansion >= 2 else 1.25)
+		if in_adoor or in_annex:
+			return true
 	return in_main or in_door or in_back
 
 
@@ -1637,6 +1663,7 @@ func _new_order(silent := false, story_key := "") -> Dictionary:
 	var cust_color := Color.WHITE
 	var complaint := ""
 	var pay := 0.0
+	var vip := false
 	if story_key != "":
 		var so: Dictionary = Story.STORY_ORDERS[story_key]
 		var ch: Dictionary = Story.CHARACTERS[story_key]
@@ -1658,17 +1685,24 @@ func _new_order(silent := false, story_key := "") -> Dictionary:
 		var complaints: Array = FAULTS[fk]["complaints"]
 		complaint = T(complaints[randi() % complaints.size()])
 		var rep_bonus := 0.9 + 0.04 * _reputation()
-		pay = snappedf(float(FAULTS[fk]["pay"]) * randf_range(0.9, 1.2) * rep_bonus * (1.15 if bool(story_flags.get("press", false)) else 1.0) * (1.1 if upgrades.has("display") else 1.0), 5.0)
+		vip = _chapter_id() not in ["c1"] and randf() < 0.1
+		pay = snappedf(float(FAULTS[fk]["pay"]) * randf_range(0.9, 1.2) * (1.8 if vip else 1.0) * rep_bonus * (1.15 if bool(story_flags.get("press", false)) else 1.0) * (1.1 if upgrades.has("display") else 1.0), 5.0)
 	order_seq += 1
 	var o := {
 		"id": order_seq, "number": _next_order_number(), "customer": cust_name, "color": cust_color, "device": FAULTS[fk]["device"], "fault": fk,
 		"complaint": complaint, "pay": pay, "story": story_key,
 		"deadline": _abs_minutes() + randf_range(180, 330), "expires": _abs_minutes() + (9999.0 if story_key != "" else (230.0 if upgrades.has("coffee") else 170.0)), "status": "new",
 	}
+	if vip:
+		o["vip"] = true
+		o["deadline"] = _abs_minutes() + randf_range(100, 160)
 	orders.append(o)
 	_spawn_customer(o, "order")
 	if not silent:
-		_toast(T("Novo cliente no balcão: %s trouxe um %s.") % [o["customer"], _dev_name(o["device"]).to_lower()], false, YELLOW)
+		if vip:
+			_toast(T("Cliente VIP no balcão: %s paga a dobrar, mas tem pressa!") % o["customer"], false, YELLOW)
+		else:
+			_toast(T("Novo cliente no balcão: %s trouxe um %s.") % [o["customer"], _dev_name(o["device"]).to_lower()], false, YELLOW)
 	_refresh_orders_badge()
 	return o
 
@@ -1680,12 +1714,13 @@ func _next_order_number() -> int:
 
 ## Calm start: one job at a time in the first chapters, more as the story advances.
 func _max_open_orders() -> int:
+	var base := 4
 	match _chapter_id():
 		"c1", "c2":
-			return 2
+			base = 2
 		"c3", "c4":
-			return 3
-	return 4
+			base = 3
+	return base + expansion + _tech_count()
 
 
 func _open_orders() -> int:
@@ -1701,7 +1736,7 @@ func _order_tick() -> void:
 				pending += 1
 		if _open_orders() < _max_open_orders() and pending == 0 and minutes < 18 * 60:
 			_new_order()
-		var rate := clampf(_reputation() / 4.0, 0.7, 1.25) * (1.5 if bool(story_flags.get("press", false)) else 1.0) * (1.3 if upgrades.has("neon") else 1.0)
+		var rate := clampf(_reputation() / 4.0, 0.7, 1.25) * (1.5 if bool(story_flags.get("press", false)) else 1.0) * (1.3 if upgrades.has("neon") else 1.0) * (1.0 + 0.3 * expansion + 0.12 * _tech_count())
 		# irregular gaps: sometimes two people close together, sometimes a long quiet spell
 		var gap := randf_range(25, 70) if randf() < 0.35 else randf_range(70, 150)
 		next_order_at = now + gap / rate
@@ -1714,6 +1749,7 @@ func _order_tick() -> void:
 			_refresh_orders_badge()
 	_story_tick()
 	_delivery_tick()
+	_staff_tick()
 
 
 func _accept_order(o: Dictionary) -> void:
@@ -1743,6 +1779,8 @@ func _decline_order(o: Dictionary) -> void:
 
 ## Moves accepted orders onto free bench slots.
 func _place_waiting_orders() -> void:
+	if staff_first:
+		_staff_assign_all()
 	for o in orders:
 		if o["status"] == "accepted" and not jobs.has(o["device"]) and _free_spot(str(o["device"])) != "":
 			_spawn_device(o["device"], o)
@@ -1772,7 +1810,12 @@ func _order_payment(o: Dictionary) -> Dictionary:
 	var stars := 5 if on_time else 3
 	if on_time and _abs_minutes() > float(o["deadline"]) - 30.0:
 		stars = 4
-	return {"tip": tip, "stars": stars}
+	if o.has("quality"):
+		stars = mini(stars, int(o["quality"]))
+	if bool(o.get("flip", false)):
+		tip = 0.0
+		stars = 5
+	return {"tip": tip, "stars": stars, "on_time": on_time}
 
 
 ## Picks the finished device up from the bench (frees the bench spot).
@@ -1823,7 +1866,11 @@ func _build_place_colliders() -> void:
 	var walls := [
 		[Vector3(5.2, 2.8, 0.1), Vector3(0, 1.4, -1.8)],
 		[Vector3(5.2, 2.8, 0.1), Vector3(0, 1.4, 2.65)],
-		[Vector3(0.1, 2.8, 4.4), Vector3(2.65, 1.4, 0.45)],
+		[Vector3(0.1, 2.8, 0.85), Vector3(2.65, 1.4, -1.35)],
+		[Vector3(0.1, 2.8, 2.8), Vector3(2.65, 1.4, 1.25)],
+		[Vector3(3.2, 2.8, 0.1), Vector3(4.25, 1.4, -1.8)],
+		[Vector3(3.2, 2.8, 0.1), Vector3(4.25, 1.4, 1.55)],
+		[Vector3(0.1, 2.8, 3.3), Vector3(5.85, 1.4, -0.12)],
 		[Vector3(0.1, 2.8, 3.0), Vector3(-2.65, 1.4, 1.1)],
 		[Vector3(0.1, 2.8, 0.6), Vector3(-2.65, 1.4, -1.45)],
 		[Vector3(1.95, 2.8, 0.1), Vector3(-3.67, 1.4, -1.8)],
@@ -1833,6 +1880,10 @@ func _build_place_colliders() -> void:
 	for w in walls:
 		var b := Kit.static_body(self, Kit.box_shape(w[0]), w[1])
 		b.collision_layer = 4
+	var annex_floor := Kit.static_body(self, Kit.box_shape(Vector3(3.2, 0.1, 3.3)), Vector3(4.25, -0.05, -0.12))
+	annex_floor.collision_layer = 8
+	annex_door_body = Kit.static_body(self, Kit.box_shape(Vector3(0.1, 2.8, 0.8)), Vector3(2.65, 1.4, -0.55))
+	annex_door_body.collision_layer = 4
 
 
 func _build_shelf_targets() -> void:
@@ -1840,7 +1891,7 @@ func _build_shelf_targets() -> void:
 		if is_instance_valid(b):
 			b.queue_free()
 	shelf_bodies.clear()
-	for i in range(room.pickup_slots.size()):
+	for i in range(shelf_items.size()):
 		var b := Kit.static_body(self, Kit.box_shape(Vector3(0.42, 0.34, 0.38)), room.pickup_slots[i] + Vector3(0, 0.17, 0), "shelf:%d" % i)
 		b.collision_layer = 1
 		shelf_bodies.append(b)
@@ -1848,6 +1899,12 @@ func _build_shelf_targets() -> void:
 
 func _shelf_place(i: int) -> void:
 	var o: Dictionary = carrying["order"]
+	_end_carry()
+	_put_on_shelf(o, i)
+	_toast(T("Pedido #%d pronto na prateleira. %s foi avisado.") % [int(o["number"]), o["customer"]], false, GREEN)
+
+
+func _put_on_shelf(o: Dictionary, i: int) -> void:
 	var node := _device_standin(str(o["device"]))
 	add_child(node)
 	node.global_position = room.pickup_slots[i] + Vector3(0, 0.04, 0)
@@ -1863,9 +1920,7 @@ func _shelf_place(i: int) -> void:
 	shelf_items[i] = {"order": o, "node": node}
 	o["status"] = "shelf"
 	o["shelf"] = i + 1
-	_end_carry()
 	_sfx("part", 0.7)
-	_toast(T("Pedido #%d pronto na prateleira. %s foi avisado.") % [int(o["number"]), o["customer"]], false, GREEN)
 	if not customers.has(int(o["id"])):
 		get_tree().create_timer(randf_range(3.0, 6.0)).timeout.connect(func() -> void:
 			if o["status"] in ["shelf", "carried"]:
@@ -1886,7 +1941,7 @@ func _shelf_take(i: int) -> void:
 
 
 ## Customer received their device: stats now, money goes on the counter.
-func _finish_order(o: Dictionary, tip: float, stars: int) -> void:
+func _finish_order(o: Dictionary, tip: float, stars: int, auto_cash := false) -> void:
 	var f: Dictionary = FAULTS[o["fault"]]
 	var gain := float(o["pay"]) + tip
 	repaired += 1
@@ -1901,8 +1956,15 @@ func _finish_order(o: Dictionary, tip: float, stars: int) -> void:
 	if c:
 		c.hold(_device_standin(str(o["device"])))
 		c.set_mood("happy")
-	if gain > 0.0:
+	if gain > 0.0 and auto_cash:
+		money += gain
+		day_profit += gain
+		room.ring_register(_eur(gain))
+		_sfx("cash", 0.8)
+		_goal_progress("earn", gain)
+	elif gain > 0.0:
 		_spawn_cash(gain, c.global_position if c else Vector3(0.6, 0, 2.0))
+	_track_delivery(o, stars)
 	_customer_leave(int(o["id"]), "happy")
 	next_order_at = minf(next_order_at, _abs_minutes() + 12.0)
 	_save_game()
@@ -1952,6 +2014,7 @@ func _collect_cash(item: Dictionary) -> void:
 	room.ring_register(_eur(float(item["amount"])))
 	_sfx("cash")
 	_toast(T("+%s na caixa registadora!") % _eur(float(item["amount"])), false, GREEN)
+	_goal_progress("earn", float(item["amount"]))
 	_save_game()
 	_refresh_objective()
 
@@ -1969,13 +2032,21 @@ func _exit_inspect_forced() -> void:
 func _end_of_day() -> void:
 	minutes = 20 * 60
 	var finished_day := day
+	var wages := _pay_wages()
+	var goals_done := 0
+	for g in daily_goals:
+		if bool(g.get("done", false)):
+			goals_done += 1
 	var p := day_profit
 	var lines := [
 		[T("A oficina fecha às 20:00."), TEXT],
 		[T("Resultado do dia:  %s") % _eur(p), GREEN if p >= 0 else Color("e74c3c")],
 		[T("Equipamentos reparados (total):  %d") % repaired, MUTED],
 		[T("Reputação:  %.1f ★") % _reputation(), YELLOW],
+		[T("Metas do dia cumpridas:  %d/%d") % [goals_done, daily_goals.size()], Color("8fd8ff")],
 	]
+	if wages > 0.0:
+		lines.insert(2, [T("Salários da equipa:  -%s") % _eur(wages), Color("ffb4a8")])
 	stamina = maxf(stamina, 80.0)
 	var rent_today := rent_due_day > 0 and finished_day >= rent_due_day
 	if rent_today:
@@ -1992,6 +2063,7 @@ func _end_of_day() -> void:
 			if o["status"] == "new":
 				orders.erase(o)
 				_customer_leave(int(o["id"]), "neutral", true)
+		_new_day_refresh()
 		_morning_orders()
 		_refresh_orders_badge()
 		_save_game()]], false)
@@ -2140,7 +2212,10 @@ func _talk_to_customer(c: Node3D) -> void:
 			var wrong := ""
 			if not carrying.is_empty():
 				wrong = T("Hmm, isso não é meu.") + " "
-			_open_dialog([[str(o["customer"]), o["color"], wrong + T("Olá! Venho buscar o pedido #%d — %s.") % [int(o["number"]), _dev_name(str(o["device"]))] + where]], [[T("Vou buscar!"), _close_dialog]])
+			var hello := T("Olá! Venho buscar o pedido #%d — %s.") % [int(o["number"]), _dev_name(str(o["device"]))]
+			if bool(o.get("flip", false)):
+				hello = T("Olá! Vi o anúncio do %s usado (#%d). Ainda está à venda?") % [_dev_name(str(o["device"])), int(o["number"])]
+			_open_dialog([[str(o["customer"]), o["color"], wrong + hello + where]], [[T("Vou buscar!"), _close_dialog]])
 			return
 		var pay := _order_payment(o)
 		var stars: int = pay["stars"]
@@ -2150,6 +2225,8 @@ func _talk_to_customer(c: Node3D) -> void:
 		if story_key != "":
 			after_scene = Story.STORY_ORDERS[story_key]["deliver"]
 		var text := T("Já está pronto? Que maravilha!") + "\n\n" + T("Pagamento:  %s") % _eur(float(o["pay"]))
+		if bool(o.get("flip", false)):
+			text = T("Está impecável! Fico com ele.") + "\n\n" + T("Preço de venda:  %s") % _eur(float(o["pay"]))
 		if tip > 0:
 			text += "     " + T("Gorjeta:  %s") % _eur(tip)
 		text += "\n" + T("Avaliação:  %s") % star_txt
@@ -2449,7 +2526,9 @@ func _save_game() -> void:
 	for pc in parcels:
 		inv_save[pc["key"]] = int(inv_save.get(pc["key"], 0)) + 1
 	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money + pending_cash, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inv_save,
-		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount, "upgrades": upgrades, "stamina": stamina, "hunger": hunger, "decor": _decor_save(), "tools_pos": _tools_save()}))
+		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount, "upgrades": upgrades, "stamina": stamina, "hunger": hunger, "decor": _decor_save(), "tools_pos": _tools_save(),
+		"expansion": expansion, "staff": _staff_save(), "staff_seq": staff_seq, "staff_first": staff_first, "candidates": candidates, "flip_offers": flip_offers,
+		"daily_goals": daily_goals, "stats": stats, "achievements": achievements}))
 
 
 func _has_save() -> bool:
@@ -2517,6 +2596,17 @@ func _load_game() -> bool:
 				pk.global_position = Vector3(a2[9], 0.95, a2[11])
 	stamina = float(data.get("stamina", 100.0))
 	hunger = float(data.get("hunger", 100.0))
+	staff_seq = int(data.get("staff_seq", 0))
+	staff_first = bool(data.get("staff_first", true))
+	stats = data.get("stats", {}) if data.get("stats", {}) is Dictionary else {}
+	achievements = data.get("achievements", {}) if data.get("achievements", {}) is Dictionary else {}
+	daily_goals = data.get("daily_goals", []) if data.get("daily_goals", []) is Array else []
+	candidates = data.get("candidates", []) if data.get("candidates", []) is Array else []
+	flip_offers = data.get("flip_offers", []) if data.get("flip_offers", []) is Array else []
+	_set_expansion(int(data.get("expansion", 0)))
+	_staff_load(data.get("staff", []))
+	if daily_goals.is_empty() or candidates.is_empty() or flip_offers.is_empty():
+		_new_day_refresh()
 	upgrades = {}
 	var up = data.get("upgrades", {})
 	if up is Dictionary:
@@ -2877,16 +2967,21 @@ func _build_hud(base: Control) -> void:
 	hud.add_child(toast)
 
 	# shortcuts (orders / shop) bottom-left
-	var sc := HBoxContainer.new()
+	var sc := VBoxContainer.new()
 	sc.anchor_top = 1.0
 	sc.anchor_bottom = 1.0
 	sc.offset_left = 22
-	sc.offset_top = -62
+	sc.offset_top = -108
 	sc.offset_bottom = -22
-	sc.add_theme_constant_override("separation", 10)
+	sc.add_theme_constant_override("separation", 6)
 	sc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(sc)
-	for it in [["P", "Pedidos"], ["L", "Loja"], ["U", "Melhorias"]]:
+	var sc_rows := [HBoxContainer.new(), HBoxContainer.new()]
+	for r in sc_rows:
+		r.add_theme_constant_override("separation", 8)
+		r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sc.add_child(r)
+	for it in [["F", "Equipa"], ["M", "Metas"], ["P", "Pedidos"], ["L", "Loja"], ["U", "Melhorias"]]:
 		var pp := _panel(Color(0.04, 0.07, 0.11, 0.88), 10, Vector4(10, 6, 14, 6))
 		var hh := HBoxContainer.new()
 		hh.add_theme_constant_override("separation", 8)
@@ -2906,7 +3001,7 @@ func _build_hud(base: Control) -> void:
 			hh.add_child(bp)
 			orders_badge.set_meta("wrap", bp)
 			bp.visible = false
-		sc.add_child(pp)
+		(sc_rows[0] if it[0] in ["F", "M"] else sc_rows[1]).add_child(pp)
 	hud.set_meta("shortcuts", sc)
 
 	# multimeter readout
@@ -3125,7 +3220,14 @@ func _refresh_objective() -> void:
 	goal.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	goal.custom_minimum_size = Vector2(250, 0)
 	objective_rows.add_child(goal)
+	if not daily_goals.is_empty():
+		var gd := 0
+		for g in daily_goals:
+			if bool(g.get("done", false)):
+				gd += 1
+		objective_rows.add_child(_label(T("Metas do dia: %d/%d  (M)") % [gd, daily_goals.size()], 13, YELLOW))
 	objective_rows.add_child(HSeparator.new())
+	var base_rows := objective_rows.get_child_count()
 	# delivery chores always shown first
 	if not carrying.is_empty():
 		objective_rows.add_child(_row(T("Leva o pedido #%d à prateleira «Prontos a entregar» ou ao cliente") % int(carrying["order"].get("number", 0)), "active"))
@@ -3141,7 +3243,7 @@ func _refresh_objective() -> void:
 	for id in jobs.keys():
 		if jobs[id]["done"]:
 			objective_rows.add_child(_row(T("Pega no %s reparado e leva-o à prateleira") % _dev_name(id).to_lower(), "active"))
-	var chores := objective_rows.get_child_count() > 3
+	var chores := objective_rows.get_child_count() > base_rows
 	if not jobs.has(focus_job) or jobs[focus_job]["done"]:
 		focus_job = ""
 		for id in jobs.keys():
@@ -3243,10 +3345,10 @@ func _build_board(base: Control) -> void:
 	p.anchor_right = 0.5
 	p.anchor_top = 0.5
 	p.anchor_bottom = 0.5
-	p.offset_left = -390
-	p.offset_right = 390
-	p.offset_top = -300
-	p.offset_bottom = 300
+	p.offset_left = -500
+	p.offset_right = 500
+	p.offset_top = -310
+	p.offset_bottom = 310
 	board_root.add_child(p)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
@@ -3255,13 +3357,13 @@ func _build_board(base: Control) -> void:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 10)
 	v.add_child(tabs)
-	for t in [["orders", "Pedidos  (P)"], ["shop", "Peças  (L)"], ["upgrades", "Melhorias  (U)"], ["decor", "Decoração"]]:
+	for t in [["orders", "Pedidos (P)"], ["shop", "Peças (L)"], ["upgrades", "Melhorias (U)"], ["decor", "Decoração"], ["team", "Equipa (F)"], ["used", "Usados"], ["goals", "Metas (M)"]]:
 		var b := Button.new()
 		b.text = T(t[1])
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(128, 40)
+		b.custom_minimum_size = Vector2(0, 38)
 		b.add_theme_font_override("font", font_xbold)
-		b.add_theme_font_size_override("font_size", 18)
+		b.add_theme_font_size_override("font_size", 15)
 		var kind: String = t[0]
 		b.pressed.connect(func() -> void: _open_board(kind))
 		tabs.add_child(b)
@@ -3274,7 +3376,7 @@ func _build_board(base: Control) -> void:
 	tabs.add_child(money_l)
 	board_root.set_meta("money", money_l)
 	var close := Button.new()
-	close.text = T("Fechar (Esc)")
+	close.text = "✕"
 	close.focus_mode = Control.FOCUS_NONE
 	close.pressed.connect(_close_board)
 	tabs.add_child(close)
@@ -3348,6 +3450,12 @@ func _refresh_board() -> void:
 		_fill_upgrades()
 	elif board_kind == "decor":
 		_fill_decor()
+	elif board_kind == "team":
+		_fill_team()
+	elif board_kind == "used":
+		_fill_used()
+	elif board_kind == "goals":
+		_fill_goals()
 	else:
 		_fill_shop()
 
@@ -3356,7 +3464,7 @@ func _fill_orders() -> void:
 	if orders.is_empty():
 		board_box.add_child(_label(T("Ainda não há clientes. Vão chegando ao longo do dia."), 18, MUTED))
 		return
-	var status_txt := {"new": [T("NOVO PEDIDO"), YELLOW], "accepted": [T("NA FILA"), Color("7fb3ff")], "repair": [T("NA BANCADA"), GREEN], "ready": [T("PRONTO — NO BALCÃO"), GREEN], "done": [T("REPARADO — NA BANCADA"), GREEN], "carried": [T("NAS TUAS MÃOS"), GREEN], "shelf": [T("NA PRATELEIRA"), GREEN]}
+	var status_txt := {"new": [T("NOVO PEDIDO"), YELLOW], "accepted": [T("NA FILA"), Color("7fb3ff")], "repair": [T("NA BANCADA"), GREEN], "ready": [T("PRONTO — NO BALCÃO"), GREEN], "done": [T("REPARADO — NA BANCADA"), GREEN], "carried": [T("NAS TUAS MÃOS"), GREEN], "shelf": [T("NA PRATELEIRA"), GREEN], "staff": [T("COM A EQUIPA"), Color("c39bff")]}
 	for o in orders:
 		var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(14, 12, 14, 12))
 		card.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -3380,8 +3488,16 @@ func _fill_orders() -> void:
 		var top := HBoxContainer.new()
 		top.add_theme_constant_override("separation", 10)
 		top.add_child(_label(T("%s  •  %s") % [o["customer"], _dev_name(o["device"])], 19, TEXT, font_xbold))
-		var st: Array = status_txt[o["status"]]
+		var st: Array = status_txt.get(o["status"], [str(o["status"]).to_upper(), MUTED])
 		top.add_child(_label(st[0], 13, st[1], font_xbold))
+		if bool(o.get("vip", false)):
+			top.add_child(_label("VIP", 13, YELLOW, font_xbold))
+		if bool(o.get("flip", false)):
+			top.add_child(_label(T("REVENDA"), 13, Color("8fd8ff"), font_xbold))
+		if o["status"] == "staff":
+			var who := _staff_by_id(int(o.get("staff", -1)))
+			if not who.is_empty():
+				top.add_child(_label(str(who["name"]).get_slice(" ", 0), 13, Color("c39bff")))
 		info.add_child(top)
 		var q := _label("“%s”" % T(o["complaint"]), 16, Color("d3dde8"))
 		q.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -3404,6 +3520,8 @@ func _fill_orders() -> void:
 			btns.add_child(dec)
 		elif o["status"] == "accepted":
 			btns.add_child(_label(T("Bancada ocupada"), 13, MUTED))
+			if _tech_count() > 0:
+				btns.add_child(_label(T("(à espera de um técnico livre)"), 12, MUTED))
 		board_box.add_child(card)
 
 
@@ -3846,6 +3964,7 @@ func _open_parcel(item: Dictionary) -> void:
 	t.tween_callback(n.queue_free)
 	_sfx("part", 0.7)
 	_toast(T("%s guardado no stock.") % T(Data.PARTS[key]["name"]), false, GREEN)
+	_goal_progress("parts", 1)
 	_refresh_objective()
 	if mode == "inspect":
 		_activate_step_targets()
@@ -3872,7 +3991,7 @@ func _tools_save() -> Dictionary:
 
 ## A few decorations already on the walls of grandpa's workshop.
 func _default_decor() -> void:
-	_spawn_decor("poster_fixit", Transform3D(Basis.looking_at(Vector3(1, 0, 0), Vector3.UP), Vector3(2.597, 1.65, -0.55)))
+	_spawn_decor("poster_fixit", Transform3D(Basis.looking_at(Vector3(1, 0, 0), Vector3.UP), Vector3(2.597, 1.65, 1.95)))
 	_spawn_decor("poster_radio", Transform3D(Basis.looking_at(Vector3(-1, 0, 0), Vector3.UP), Vector3(-2.597, 1.65, 2.05)))
 	_spawn_decor("clock", Transform3D(Basis.looking_at(Vector3(0, 0, 1), Vector3.UP), Vector3(-1.75, 2.1, 2.597)))
 	_spawn_decor("string_lights", Transform3D(Basis.looking_at(Vector3(0, 0, -1), Vector3.UP), Vector3(1.2, 2.45, -1.745)))
@@ -4463,6 +4582,13 @@ func _new_game() -> void:
 	upgrades = {}
 	stamina = 100.0
 	hunger = 100.0
+	staff_seq = 0
+	staff_first = true
+	stats = {}
+	achievements = {}
+	_staff_load([])
+	_set_expansion(0)
+	_new_day_refresh()
 	_clear_decor()
 	room.clear_upgrades()
 	_apply_upgrades()
@@ -4641,3 +4767,891 @@ func _close_popup() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	elif mode == "inspect":
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+
+
+# =============================================================================
+# Shop expansion, staff, used-device market, daily goals and achievements
+# =============================================================================
+const DESK_POS := Vector3(0.35, 0.0, 0.8)
+
+
+func _set_expansion(lvl: int) -> void:
+	expansion = clampi(lvl, 0, Staff.EXPANSIONS.size())
+	room.set_expansion(expansion)
+	if annex_door_body:
+		annex_door_body.collision_layer = 0 if expansion >= 1 else 4
+	var n := 8 if expansion >= 2 else 4
+	while shelf_items.size() > n:
+		var it = shelf_items.pop_back()
+		if it != null and is_instance_valid(it["node"]):
+			(it["node"] as Node3D).queue_free()
+	while shelf_items.size() < n:
+		shelf_items.append(null)
+	_build_shelf_targets()
+	_stat_set("expansion", expansion)
+	_refresh_station_labels()
+
+
+func _buy_expansion() -> void:
+	if expansion >= Staff.EXPANSIONS.size():
+		return
+	var ex: Dictionary = Staff.EXPANSIONS[expansion]
+	var price := float(ex["price"])
+	if money < price:
+		_toast(T("Dinheiro insuficiente."), true)
+		return
+	money -= price
+	day_profit -= price
+	_set_expansion(expansion + 1)
+	_sfx("cash")
+	_toast(T("Obras concluídas: %s! Vai ver o anexo pela porta da direita.") % T(str(ex["name"])), false, GREEN)
+	_save_game()
+	_refresh_board()
+
+
+func _free_shelf_slot() -> int:
+	for i in range(shelf_items.size()):
+		if shelf_items[i] == null:
+			return i
+	return -1
+
+
+# --- staff helpers -------------------------------------------------------------
+func _tech_count() -> int:
+	var n := 0
+	for e in staff:
+		if e["role"] == "tech":
+			n += 1
+	return n
+
+
+func _staff_by_id(id: int) -> Dictionary:
+	for e in staff:
+		if int(e["id"]) == id:
+			return e
+	return {}
+
+
+func _first_name(e: Dictionary) -> String:
+	return str(e["name"]).get_slice(" ", 0)
+
+
+func _cat_of(device: String) -> String:
+	for c in Staff.CATEGORIES.keys():
+		if device in Staff.CATEGORIES[c]["devices"]:
+			return c
+	return "pc"
+
+
+func _staff_speed(e: Dictionary, device: String) -> float:
+	var sk: Dictionary = e.get("skills", {})
+	return float(sk.get(_cat_of(device), 1.0)) * (1.0 + minf(float(e.get("repairs", 0)), 30.0) * 0.01) * (1.1 if upgrades.has("lamp") else 1.0)
+
+
+func _on_shift(e: Dictionary) -> bool:
+	var sh: Dictionary = Staff.SHIFTS[str(e["shift"])]
+	var h := minutes / 60.0
+	return h >= float(sh["start"]) and h < float(sh["end"])
+
+
+func _shift_text(shift: String) -> String:
+	var sh: Dictionary = Staff.SHIFTS[shift]
+	return "%s  %02d:00–%02d:00" % [T(str(sh["name"])), int(sh["start"]), int(sh["end"])]
+
+
+func _stations_available() -> int:
+	return mini(room.staff_stations.size(), 2 * expansion)
+
+
+func _free_station() -> int:
+	for i in range(_stations_available()):
+		var used := false
+		for e in staff:
+			if e["role"] == "tech" and int(e.get("station", -1)) == i:
+				used = true
+		if not used:
+			return i
+	return -1
+
+
+func _gen_candidate(role: String) -> Dictionary:
+	var ni := randi() % Staff.NAMES.size()
+	for tries in range(10):
+		var clash := false
+		for e in staff + candidates:
+			if int(e.get("ni", -1)) == ni:
+				clash = true
+		if not clash:
+			break
+		ni = randi() % Staff.NAMES.size()
+	var stars := 1 + int(randf() < 0.55) + int(randf() < 0.25)
+	var shift: String = ["morning", "afternoon", "full"][randi() % 3]
+	var c := {"ni": ni, "name": Staff.NAMES[ni][0], "role": role, "stars": stars, "shift": shift, "seed": randi() % 100000, "repairs": 0}
+	var wage := 0.0
+	if role == "tech":
+		var cats: Array = Staff.CATEGORIES.keys()
+		var main: String = cats[randi() % cats.size()]
+		var sk := {}
+		for k in cats:
+			sk[k] = snappedf(randf_range(0.65, 1.0) + 0.07 * stars, 0.05)
+		sk[main] = snappedf(randf_range(1.45, 1.8) + 0.1 * stars, 0.05)
+		c["skills"] = sk
+		c["main"] = main
+		wage = 28.0 + 14.0 * stars + (float(sk[main]) - 1.5) * 30.0
+	else:
+		wage = 24.0 + 9.0 * stars
+	c["wage"] = maxf(15.0, snappedf(wage * float(Staff.SHIFTS[shift]["mult"]), 5.0))
+	return c
+
+
+func _hire(i: int) -> void:
+	if i < 0 or i >= candidates.size():
+		return
+	var c: Dictionary = candidates[i]
+	if c["role"] == "tech":
+		var st := _free_station()
+		if st < 0:
+			_toast(T("Não há bancada livre para um técnico. Expande a loja primeiro."), true)
+			return
+		c["station"] = st
+	else:
+		for e in staff:
+			if e["role"] == "desk":
+				_toast(T("Já tens um balconista."), true)
+				return
+	staff_seq += 1
+	c["id"] = staff_seq
+	c["job"] = {}
+	candidates.remove_at(i)
+	staff.append(c)
+	_stat_add("hired", 1)
+	_stat_set("team_size", staff.size())
+	_toast(T("%s foi contratado/a! Turno: %s.") % [c["name"], _shift_text(str(c["shift"]))], false, GREEN)
+	_sfx("door_chime", 0.6)
+	_staff_tick()
+	_save_game()
+	_refresh_board()
+
+
+func _fire(id: int) -> void:
+	var e := _staff_by_id(id)
+	if e.is_empty():
+		return
+	var job: Dictionary = e.get("job", {})
+	if not job.is_empty():
+		var o: Dictionary = job["order"]
+		if orders.has(o):
+			o["status"] = "accepted"
+			o.erase("staff")
+			var part: String = FAULTS[o["fault"]]["part"]
+			if part != "":
+				inventory[part] = int(inventory.get(part, 0)) + 1
+	_staff_clear_device(e)
+	if staff_nodes.has(id) and is_instance_valid(staff_nodes[id]):
+		(staff_nodes[id] as Node3D).queue_free()
+	staff_nodes.erase(id)
+	staff.erase(e)
+	_toast(T("%s saiu da equipa.") % e["name"])
+	_refresh_station_labels()
+	_place_waiting_orders()
+	_save_game()
+	_refresh_board()
+
+
+func _pay_wages() -> float:
+	var total := 0.0
+	for e in staff:
+		total += float(e["wage"])
+	if total > 0.0:
+		money -= total
+		day_profit -= total
+	return total
+
+
+func _staff_save() -> Array:
+	var out: Array = []
+	for e in staff:
+		var d: Dictionary = {}
+		for k in e.keys():
+			if k in ["job", "dev_node", "timer", "warned"]:
+				continue
+			d[k] = e[k]
+		out.append(d)
+	return out
+
+
+func _staff_load(arr) -> void:
+	for e in staff:
+		_staff_clear_device(e)
+	for n in staff_nodes.values():
+		if is_instance_valid(n):
+			(n as Node3D).queue_free()
+	staff_nodes.clear()
+	staff = []
+	if arr is Array:
+		for d in arr:
+			if not (d is Dictionary):
+				continue
+			var e: Dictionary = (d as Dictionary).duplicate(true)
+			for k in ["id", "ni", "stars", "seed", "repairs", "station"]:
+				if e.has(k):
+					e[k] = int(e[k])
+			if not Staff.SHIFTS.has(str(e.get("shift", ""))):
+				e["shift"] = "full"
+			e["job"] = {}
+			staff.append(e)
+	staff_last_min = -1.0
+	_refresh_station_labels()
+
+
+# --- staff simulation ------------------------------------------------------------
+func _order_on_bench(o: Dictionary) -> bool:
+	for id in jobs.keys():
+		if jobs[id]["order"] == o:
+			return true
+	return false
+
+
+func _staff_assign_all() -> void:
+	for e in staff:
+		if e["role"] == "tech" and (e.get("job", {}) as Dictionary).is_empty() and _on_shift(e):
+			_staff_take_job(e)
+
+
+func _staff_take_job(e: Dictionary) -> bool:
+	var best: Dictionary = {}
+	var best_speed := 0.0
+	for o in orders:
+		if o["status"] != "accepted" or _order_on_bench(o) or str(o.get("story", "")) != "":
+			continue
+		var part: String = FAULTS[o["fault"]]["part"]
+		if part != "" and int(inventory.get(part, 0)) <= 0:
+			continue
+		var sp := _staff_speed(e, str(o["device"]))
+		if sp > best_speed:
+			best = o
+			best_speed = sp
+	if best.is_empty():
+		return false
+	var part2: String = FAULTS[best["fault"]]["part"]
+	if part2 != "":
+		inventory[part2] = int(inventory.get(part2, 0)) - 1
+	best["status"] = "staff"
+	best["staff"] = e["id"]
+	var total := float((FAULTS[best["fault"]]["steps"] as Array).size()) * 3.5 / best_speed
+	e["job"] = {"order": best, "left": total, "total": total}
+	_staff_show_device(e)
+	_refresh_orders_badge()
+	_refresh_orders_panel()
+	return true
+
+
+func _staff_tick() -> void:
+	var now := _abs_minutes()
+	if staff_last_min < 0.0 or now < staff_last_min:
+		staff_last_min = now
+	var dm := minf(now - staff_last_min, 5.0)     # time jumps (sleeping, loading) don't finish jobs instantly
+	staff_last_min = now
+	for e in staff.duplicate():
+		var on := _on_shift(e)
+		_staff_place_node(e, on)
+		if e["role"] == "tech":
+			var job: Dictionary = e.get("job", {})
+			if job.is_empty():
+				if on:
+					_staff_take_job(e)
+			elif not orders.has(job["order"]):
+				e["job"] = {}
+				_staff_clear_device(e)
+			elif job.has("ready"):
+				_staff_finish(e)
+			elif on:
+				job["left"] = float(job["left"]) - dm
+				if float(job["left"]) <= 0.0:
+					_staff_finish(e)
+		elif on:
+			e["timer"] = float(e.get("timer", 0.0)) - dm
+			if float(e["timer"]) <= 0.0:
+				e["timer"] = 4.0
+				_desk_serve(e)
+		_staff_label(e, on)
+
+
+func _staff_finish(e: Dictionary) -> void:
+	var job: Dictionary = e["job"]
+	var o: Dictionary = job["order"]
+	var slot := _free_shelf_slot()
+	if slot < 0:
+		if not job.has("ready"):
+			_toast(T("%s acabou um trabalho, mas a prateleira «Prontos a entregar» está cheia!") % _first_name(e), true)
+		job["ready"] = true
+		return
+	e["job"] = {}
+	_staff_clear_device(e)
+	o["quality"] = 5 if randf() < 0.45 + 0.17 * int(e["stars"]) else 4
+	e["repairs"] = int(e.get("repairs", 0)) + 1
+	_stat_add("staff_repairs", 1)
+	_put_on_shelf(o, slot)
+	_toast(T("%s terminou o pedido #%d (%s). Está na prateleira #%d.") % [_first_name(e), int(o["number"]), _dev_name(str(o["device"])), slot + 1], false, GREEN)
+	if int(e["repairs"]) % 5 == 0 and int(e["repairs"]) <= 30:
+		get_tree().create_timer(2.5).timeout.connect(func() -> void: _toast(T("%s ganhou experiência e está mais rápido/a!") % _first_name(e), false, YELLOW))
+	_refresh_objective()
+	_refresh_orders_panel()
+
+
+func _desk_serve(e: Dictionary) -> void:
+	if mode == "dialog":
+		return
+	if not cash_items.is_empty():
+		_collect_cash(cash_items[0])
+		return
+	for oid in counter_queue.duplicate():
+		var c: Node3D = customers.get(oid)
+		if c == null or not is_instance_valid(c) or c.walking or not c.look_enabled:
+			continue
+		var purpose := str(c.get_meta("purpose", "order"))
+		var o: Dictionary = c.get_meta("order", {})
+		if purpose == "story" or str(o.get("story", "")) != "":
+			if not c.has_meta("desk_warned"):
+				c.set_meta("desk_warned", true)
+				_toast(T("%s: «Está aqui alguém que quer falar contigo!»") % _first_name(e), false, YELLOW)
+			continue
+		if purpose == "order" and o.get("status", "") == "new":
+			_accept_order(o)
+			_toast(T("%s aceitou o pedido de %s (%s).") % [_first_name(e), o["customer"], _dev_name(str(o["device"]))], false, GREEN)
+			return
+		if purpose == "pickup" and o.get("status", "") == "shelf":
+			var i := int(o.get("shelf", 0)) - 1
+			if i >= 0 and i < shelf_items.size() and shelf_items[i] != null and shelf_items[i]["order"] == o:
+				(shelf_items[i]["node"] as Node3D).queue_free()
+				shelf_items[i] = null
+			var pay := _order_payment(o)
+			var gain := float(o["pay"]) + float(pay["tip"])
+			_finish_order(o, pay["tip"], pay["stars"], true)
+			_toast(T("%s entregou o pedido #%d e guardou %s na caixa.") % [_first_name(e), int(o["number"]), _eur(gain)], false, GREEN)
+			return
+
+
+func _staff_node(e: Dictionary) -> Node3D:
+	var id := int(e["id"])
+	if staff_nodes.has(id) and is_instance_valid(staff_nodes[id]):
+		return staff_nodes[id]
+	var c: Node3D = CustomerScene.new()
+	var look: Dictionary = (Staff.NAMES[int(e.get("ni", 0)) % Staff.NAMES.size()][1] as Dictionary).duplicate(true)
+	var ex: Array = (look.get("extras", []) as Array).duplicate()
+	ex.append("apron")
+	look["extras"] = ex
+	look["shirt"] = Color("2c3e50") if e["role"] == "tech" else Color("8e2b2b")
+	c.setup(_first_name(e), int(e.get("seed", 1)), look)
+	c.role = "staff"
+	add_child(c)
+	c.pick.collision_layer = 0
+	c.name_tag.no_depth_test = false
+	c.set_mood("happy")
+	c.visible = false
+	staff_nodes[id] = c
+	return c
+
+
+func _staff_place_node(e: Dictionary, on: bool) -> void:
+	var c := _staff_node(e)
+	if c.visible != on:
+		c.visible = on
+	if not on:
+		return
+	if e["role"] == "tech":
+		var si := int(e.get("station", 0))
+		if si >= room.staff_stations.size():
+			return
+		var st: Dictionary = room.staff_stations[si]
+		if c.global_position.distance_to(st["stand"]) > 0.05:
+			c.global_position = st["stand"]
+			c.rotation.y = st["yaw"]
+		var job: Dictionary = e.get("job", {})
+		c.working = not job.is_empty() and not job.has("ready")
+	else:
+		if c.global_position.distance_to(DESK_POS) > 0.05:
+			c.global_position = DESK_POS
+			c.rotation.y = 0.0
+		c.look_enabled = true
+		var tgt := cam.global_position
+		if not counter_queue.is_empty():
+			var fc = customers.get(counter_queue[0])
+			if fc != null and is_instance_valid(fc):
+				tgt = (fc as Node3D).global_position + Vector3(0, 1.5, 0)
+		c.look_target = tgt
+
+
+func _staff_show_device(e: Dictionary) -> void:
+	_staff_clear_device(e)
+	var job: Dictionary = e.get("job", {})
+	if job.is_empty():
+		return
+	var si := int(e.get("station", 0))
+	if si >= room.staff_stations.size():
+		return
+	var st: Dictionary = room.staff_stations[si]
+	var n := _device_standin(str(job["order"]["device"]))
+	add_child(n)
+	n.global_position = st["top"] + Vector3(0, 0.012, 0)
+	n.rotation = Vector3(0, float(st["yaw"]) + PI, 0)
+	e["dev_node"] = n
+
+
+func _staff_clear_device(e: Dictionary) -> void:
+	var n = e.get("dev_node")
+	if n != null and is_instance_valid(n):
+		(n as Node3D).queue_free()
+	e.erase("dev_node")
+
+
+func _set_label(l: Label3D, txt: String) -> void:
+	if l and l.text != txt:
+		l.text = txt
+
+
+func _refresh_station_labels() -> void:
+	if room == null:
+		return
+	for i in range(room.staff_stations.size()):
+		var st: Dictionary = room.staff_stations[i]
+		var taken := false
+		for e in staff:
+			if e["role"] == "tech" and int(e.get("station", -1)) == i:
+				taken = true
+		if not taken:
+			_set_label(st["label"], T("Bancada livre") + "\n" + T("Contrata um técnico (F)"))
+
+
+func _staff_label(e: Dictionary, on: bool) -> void:
+	if e["role"] != "tech":
+		return
+	var si := int(e.get("station", 0))
+	if si >= room.staff_stations.size():
+		return
+	var l: Label3D = room.staff_stations[si]["label"]
+	var nm := _first_name(e)
+	var txt := ""
+	var job: Dictionary = e.get("job", {})
+	if not on:
+		var sh: Dictionary = Staff.SHIFTS[str(e["shift"])]
+		if minutes / 60.0 < float(sh["start"]):
+			txt = nm + "\n" + T("Entra às %02d:00") % int(sh["start"])
+		else:
+			txt = nm + "\n" + T("Turno terminado")
+	elif job.is_empty():
+		txt = T("À espera de trabalho")
+	elif job.has("ready"):
+		txt = T("Pronto! Prateleira cheia")
+	else:
+		var pct := int(100.0 * (1.0 - float(job["left"]) / maxf(0.01, float(job["total"]))))
+		txt = "%s #%d  •  %d%%" % [_dev_name(str(job["order"]["device"])), int(job["order"]["number"]), clampi(pct, 0, 99)]
+	_set_label(l, txt)
+
+
+# --- used-device market (Fix & Flip) ------------------------------------------------
+func _gen_flip() -> Dictionary:
+	var keys: Array = []
+	for k in FAULTS.keys():
+		if FAULTS[k]["device"] == "gamepad" and not bool(story_flags.get("leo", false)):
+			continue
+		keys.append(k)
+	var fk: String = keys[randi() % keys.size()]
+	var f: Dictionary = FAULTS[fk]
+	var base := float(f["pay"])
+	var part: String = f["part"]
+	var part_cost := float(Data.PARTS[part]["price"]) if part != "" else 0.0
+	var buy := snappedf(base * randf_range(0.5, 0.9) + 10.0, 5.0)
+	var sell := snappedf(buy + part_cost + base * randf_range(0.8, 1.45), 5.0)
+	return {"fault": fk, "device": f["device"], "buy": buy, "sell": sell, "sold": false}
+
+
+func _buy_flip(i: int) -> void:
+	if i < 0 or i >= flip_offers.size():
+		return
+	var of: Dictionary = flip_offers[i]
+	var buy := float(of["buy"])
+	if bool(of.get("sold", false)):
+		return
+	if money < buy:
+		_toast(T("Dinheiro insuficiente."), true)
+		return
+	money -= buy
+	day_profit -= buy
+	of["sold"] = true
+	var cust: Array = Data.CUSTOMERS[randi() % Data.CUSTOMERS.size()]
+	order_seq += 1
+	var o := {"id": order_seq, "number": _next_order_number(), "customer": cust[0], "color": cust[1], "device": of["device"], "fault": of["fault"],
+		"complaint": "Comprado no mercado de usados. Repara e revende com lucro!", "pay": float(of["sell"]), "story": "",
+		"deadline": _abs_minutes() + 6000.0, "expires": 9e9, "status": "accepted", "flip": true}
+	orders.append(o)
+	_sfx("cash", 0.5)
+	_toast(T("Compraste um %s avariado. Repara-o e põe-no na prateleira: aparece um comprador.") % _dev_name(str(of["device"])).to_lower(), false, GREEN)
+	_place_waiting_orders()
+	_refresh_board()
+	_refresh_orders_badge()
+	_refresh_objective()
+
+
+# --- daily goals + achievements -----------------------------------------------------
+func _new_day_refresh() -> void:
+	candidates.clear()
+	for r in ["tech", "tech", "desk"]:
+		candidates.append(_gen_candidate(r))
+	if randf() < 0.5:
+		candidates.append(_gen_candidate("tech"))
+	flip_offers.clear()
+	for i in range(3):
+		flip_offers.append(_gen_flip())
+	_gen_goals()
+	_stat_set("day", day)
+
+
+func _gen_goals() -> void:
+	daily_goals.clear()
+	var pool: Array = Staff.GOALS.duplicate()
+	pool.shuffle()
+	for g in pool:
+		if daily_goals.size() >= 3:
+			break
+		var kind: String = g["kind"]
+		if kind == "flip" and day < 2:
+			continue
+		var target := randi_range(int(g["min"]), int(g["max"]))
+		var reward := float(g["reward"]) * target
+		var dev := ""
+		if kind == "earn":
+			target = int(snappedf(randf_range(float(g["min"]), float(g["max"])) * (1.0 + 0.5 * expansion), 50.0))
+			reward = snappedf(target * 0.15, 5.0)
+		elif kind == "device":
+			var devs: Array = []
+			for k in Data.DEVICES.keys():
+				if k == "gamepad" and not bool(story_flags.get("leo", false)):
+					continue
+				devs.append(k)
+			dev = devs[randi() % devs.size()]
+		daily_goals.append({"kind": kind, "text": g["text"], "target": target, "progress": 0, "reward": reward, "dev": dev, "done": false})
+
+
+func _goal_text(g: Dictionary) -> String:
+	if int(g["target"]) == 1 and str(g["kind"]) in ["repair", "ontime", "five", "parts"]:
+		for gd in Staff.GOALS:
+			if gd["kind"] == g["kind"]:
+				return T(str(gd["one"]))
+	match str(g["kind"]):
+		"earn":
+			return T(str(g["text"])) % _eur(float(g["target"]))
+		"device":
+			return T(str(g["text"])) % _dev_name(str(g["dev"]))
+	return T(str(g["text"])) % int(g["target"])
+
+
+func _goal_progress(kind: String, amount: float, dev := "") -> void:
+	var changed := false
+	for g in daily_goals:
+		if bool(g.get("done", false)) or str(g["kind"]) != kind:
+			continue
+		if kind == "device" and str(g["dev"]) != dev:
+			continue
+		g["progress"] = minf(float(g["target"]), float(g["progress"]) + amount)
+		changed = true
+		if float(g["progress"]) >= float(g["target"]):
+			g["done"] = true
+			var r := float(g["reward"])
+			money += r
+			day_profit += r
+			_gain_xp(20)
+			_sfx("cash", 0.6)
+			_toast(T("Meta do dia cumprida: %s  (+%s)") % [_goal_text(g), _eur(r)], false, YELLOW)
+			var all_done := true
+			for g2 in daily_goals:
+				if not bool(g2.get("done", false)):
+					all_done = false
+			if all_done:
+				_stat_add("perfect_days", 1)
+	_check_achievements()
+	if changed:
+		_refresh_objective()
+
+
+func _track_delivery(o: Dictionary, stars: int) -> void:
+	var flip := bool(o.get("flip", false))
+	_goal_progress("repair", 1)
+	if stars >= 4 and not flip:
+		_goal_progress("ontime", 1)
+	if stars == 5:
+		_goal_progress("five", 1)
+		_stat_add("five_stars", 1)
+	_goal_progress("device", 1, str(o["device"]))
+	if flip:
+		_goal_progress("flip", 1)
+		_stat_add("flips", 1)
+	if bool(o.get("vip", false)):
+		_stat_add("vips", 1)
+	var types: Array = stats.get("types", [])
+	if not types.has(str(o["device"])):
+		types.append(str(o["device"]))
+	stats["types"] = types
+	stats["device_types"] = types.size()
+	_stat_add("repairs", 1)
+
+
+func _stat_add(k: String, n: float) -> void:
+	stats[k] = float(stats.get(k, 0.0)) + n
+	_check_achievements()
+
+
+func _stat_set(k: String, v: float) -> void:
+	stats[k] = maxf(float(stats.get(k, 0.0)), v)
+	_check_achievements()
+
+
+func _stat_value(k: String) -> float:
+	if k == "money":
+		return money
+	return float(stats.get(k, 0.0))
+
+
+func _check_achievements() -> void:
+	for id in Staff.ACHIEVEMENTS.keys():
+		if achievements.has(id):
+			continue
+		var a: Dictionary = Staff.ACHIEVEMENTS[id]
+		if _stat_value(str(a["stat"])) >= float(a["target"]):
+			achievements[id] = day
+			var r := float(a["reward"])
+			money += r
+			_gain_xp(30)
+			_sfx("cash", 0.7)
+			_toast(T("Conquista desbloqueada: %s!") % T(str(a["name"])) + ("  (+%s)" % _eur(r) if r > 0.0 else ""), false, YELLOW)
+
+
+# --- boards -------------------------------------------------------------------------
+func _card() -> PanelContainer:
+	var card := _panel(Color(0.07, 0.11, 0.17, 1.0), 12, Vector4(14, 10, 14, 10))
+	card.mouse_filter = Control.MOUSE_FILTER_PASS
+	return card
+
+
+func _section(text: String) -> void:
+	board_box.add_child(_label(text, 19, YELLOW, font_xbold))
+
+
+func _skill_bar(value: float) -> Control:
+	var bar := Control.new()
+	bar.custom_minimum_size = Vector2(90, 10)
+	var v := clampf((value - 0.5) / 1.6, 0.05, 1.0)
+	bar.draw.connect(func() -> void:
+		bar.draw_rect(Rect2(0, 1, 90, 8), Color(0.15, 0.2, 0.28))
+		bar.draw_rect(Rect2(0, 1, 90 * v, 8), GREEN if value >= 1.4 else (YELLOW if value >= 1.0 else Color("e67e22"))))
+	return bar
+
+
+func _person_card(e: Dictionary, hired: bool, idx: int) -> PanelContainer:
+	var card := _card()
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 14)
+	card.add_child(h)
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 3)
+	h.add_child(info)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	top.add_child(_label(str(e["name"]), 18, TEXT, font_xbold))
+	top.add_child(_label(T(str(Staff.ROLES[e["role"]]["name"])), 14, Color("8fd8ff"), font_xbold))
+	top.add_child(_label("★".repeat(int(e["stars"])) + "☆".repeat(3 - int(e["stars"])), 15, YELLOW))
+	info.add_child(top)
+	info.add_child(_label(T("Horário: %s   •   Salário: %s/dia") % [_shift_text(str(e["shift"])), _eur(float(e["wage"]))], 14, MUTED))
+	if e["role"] == "tech":
+		var grid := GridContainer.new()
+		grid.columns = 4
+		grid.add_theme_constant_override("h_separation", 10)
+		grid.add_theme_constant_override("v_separation", 2)
+		var sk: Dictionary = e.get("skills", {})
+		for k in Staff.CATEGORIES.keys():
+			grid.add_child(_label(T(str(Staff.CATEGORIES[k]["name"])), 13, Color("c7d3df")))
+			var bb := CenterContainer.new()
+			bb.add_child(_skill_bar(float(sk.get(k, 1.0))))
+			grid.add_child(bb)
+		info.add_child(grid)
+	else:
+		var dl := _label(T(str(Staff.ROLES["desk"]["desc"])), 13, Color("c7d3df"))
+		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		dl.custom_minimum_size = Vector2(560, 0)
+		info.add_child(dl)
+	if hired:
+		var status := ""
+		var on := _on_shift(e)
+		var job: Dictionary = e.get("job", {})
+		if not on:
+			status = T("Fora de horário")
+		elif e["role"] == "desk":
+			status = T("No balcão")
+		elif job.is_empty():
+			status = T("À espera de trabalho")
+		else:
+			status = T("A reparar: %s #%d") % [_dev_name(str(job["order"]["device"])), int(job["order"]["number"])]
+		info.add_child(_label(T("Estado: %s   •   Reparações feitas: %d") % [status, int(e.get("repairs", 0))], 13, GREEN if on else MUTED))
+		var fire := _small_button(T("Despedir"), false)
+		fire.custom_minimum_size = Vector2(120, 36)
+		fire.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var id := int(e["id"])
+		fire.pressed.connect(func() -> void: _fire(id))
+		h.add_child(fire)
+	else:
+		var hire := _small_button(T("Contratar"), true)
+		hire.custom_minimum_size = Vector2(130, 36)
+		var can := true
+		if e["role"] == "tech":
+			can = _free_station() >= 0
+		else:
+			for s2 in staff:
+				if s2["role"] == "desk":
+					can = false
+		hire.disabled = not can
+		hire.pressed.connect(func() -> void: _hire(idx))
+		var vb := VBoxContainer.new()
+		vb.alignment = BoxContainer.ALIGNMENT_CENTER
+		vb.add_child(hire)
+		if not can:
+			vb.add_child(_label(T("Sem bancada livre") if e["role"] == "tech" else T("Já tens um"), 12, MUTED))
+		h.add_child(vb)
+	return card
+
+
+func _fill_team() -> void:
+	# expansion
+	_section(T("Expansão da loja"))
+	if expansion < Staff.EXPANSIONS.size():
+		var ex: Dictionary = Staff.EXPANSIONS[expansion]
+		var card := _card()
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 12)
+		card.add_child(h)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(_label(T(str(ex["name"])) + "  (%d/%d)" % [expansion + 1, Staff.EXPANSIONS.size()], 18, TEXT, font_xbold))
+		var dl := _label(T(str(ex["desc"])), 14, MUTED)
+		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		dl.custom_minimum_size = Vector2(600, 0)
+		info.add_child(dl)
+		h.add_child(info)
+		var buy := _small_button("%s  %s" % [T("Comprar"), _eur(float(ex["price"]))], true)
+		buy.custom_minimum_size = Vector2(170, 38)
+		buy.disabled = money < float(ex["price"])
+		buy.pressed.connect(_buy_expansion)
+		h.add_child(buy)
+		board_box.add_child(card)
+	else:
+		board_box.add_child(_label(T("A loja está totalmente ampliada: 4 bancadas no anexo e 8 lugares na prateleira."), 15, GREEN))
+	var free := _stations_available() - _tech_count()
+	board_box.add_child(_label(T("Bancadas para técnicos: %d (livres: %d)   •   Pedidos abertos ao mesmo tempo: até %d") % [_stations_available(), maxi(0, free), _max_open_orders()], 14, MUTED))
+	var tg := CheckButton.new()
+	tg.text = T("Dar os trabalhos novos primeiro à equipa (desliga para seres tu a reparar primeiro)")
+	tg.button_pressed = staff_first
+	tg.focus_mode = Control.FOCUS_NONE
+	tg.add_theme_font_size_override("font_size", 14)
+	tg.toggled.connect(func(on: bool) -> void:
+		staff_first = on
+		if on:
+			_staff_assign_all())
+	board_box.add_child(tg)
+	# team
+	_section(T("A tua equipa (%d)") % staff.size())
+	if staff.is_empty():
+		board_box.add_child(_label(T("Ainda trabalhas sozinho/a. Contrata um balconista para atender o balcão, ou compra o anexo para teres técnicos."), 15, MUTED))
+	else:
+		var wages := 0.0
+		for e in staff:
+			wages += float(e["wage"])
+			board_box.add_child(_person_card(e, true, -1))
+		board_box.add_child(_label(T("Salários: %s por dia (pagos ao fechar a loja)") % _eur(wages), 14, Color("ffb4a8")))
+	# candidates
+	_section(T("Candidatos de hoje"))
+	board_box.add_child(_label(T("Cada técnico é mais rápido em certos equipamentos. Novos candidatos todas as manhãs."), 14, MUTED))
+	if candidates.is_empty():
+		board_box.add_child(_label(T("Não há mais candidatos hoje."), 15, MUTED))
+	for i in range(candidates.size()):
+		board_box.add_child(_person_card(candidates[i], false, i))
+
+
+func _fill_used() -> void:
+	board_box.add_child(_label(T("Fix & Flip: compra equipamentos avariados, repara-os e põe-nos na prateleira. Aparece um comprador e pagas-te com lucro."), 15, MUTED))
+	for i in range(flip_offers.size()):
+		var of: Dictionary = flip_offers[i]
+		var f: Dictionary = FAULTS[of["fault"]]
+		var card := _card()
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 12)
+		card.add_child(h)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(_label("%s  •  %s" % [_dev_name(str(of["device"])), T(str(f["fault"]))], 18, TEXT, font_xbold))
+		var part: String = f["part"]
+		var part_txt := T("Não precisa de peças") if part == "" else T("Precisa de: %s (em stock: %d)") % [T(str(Data.PARTS[part]["name"])), int(inventory.get(part, 0))]
+		info.add_child(_label(T("Compra: %s   •   Venda prevista: %s   •   %s") % [_eur(float(of["buy"])), _eur(float(of["sell"])), part_txt], 14, MUTED))
+		var profit := float(of["sell"]) - float(of["buy"]) - (float(Data.PARTS[part]["price"]) if part != "" else 0.0)
+		info.add_child(_label(T("Lucro estimado: %s") % _eur(profit), 14, GREEN))
+		h.add_child(info)
+		if bool(of.get("sold", false)):
+			h.add_child(_label(T("Comprado ✓"), 16, GREEN, font_xbold))
+		else:
+			var buy := _small_button("%s  %s" % [T("Comprar"), _eur(float(of["buy"]))], true)
+			buy.custom_minimum_size = Vector2(170, 38)
+			buy.disabled = money < float(of["buy"]) or _open_orders() >= _max_open_orders() + 2
+			var k := i
+			buy.pressed.connect(func() -> void: _buy_flip(k))
+			h.add_child(buy)
+		board_box.add_child(card)
+	board_box.add_child(_label(T("Novas ofertas todas as manhãs."), 14, MUTED))
+
+
+func _fill_goals() -> void:
+	_section(T("Metas do Dia %d") % day)
+	for g in daily_goals:
+		var card := _card()
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 12)
+		card.add_child(h)
+		var done := bool(g.get("done", false))
+		h.add_child(_icon("box_active" if done else "box", 22))
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(_label(_goal_text(g), 17, GREEN if done else TEXT, font_xbold))
+		var pb := ProgressBar.new()
+		pb.max_value = float(g["target"])
+		pb.value = float(g["progress"])
+		pb.show_percentage = false
+		pb.custom_minimum_size = Vector2(300, 8)
+		info.add_child(pb)
+		h.add_child(info)
+		var prog := "%s / %s" % [_eur(float(g["progress"])), _eur(float(g["target"]))] if str(g["kind"]) == "earn" else "%d / %d" % [int(g["progress"]), int(g["target"])]
+		h.add_child(_label(prog, 15, MUTED))
+		h.add_child(_label("+" + _eur(float(g["reward"])), 16, YELLOW, font_xbold))
+		board_box.add_child(card)
+	_section(T("Conquistas (%d/%d)") % [achievements.size(), Staff.ACHIEVEMENTS.size()])
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 8)
+	board_box.add_child(grid)
+	for id in Staff.ACHIEVEMENTS.keys():
+		var a: Dictionary = Staff.ACHIEVEMENTS[id]
+		var got := achievements.has(id)
+		var card := _card()
+		card.custom_minimum_size = Vector2(460, 0)
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		card.add_child(h)
+		h.add_child(_icon("star" if got else "box", 24))
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(_label(T(str(a["name"])), 16, YELLOW if got else TEXT, font_xbold))
+		var cur := minf(_stat_value(str(a["stat"])), float(a["target"]))
+		var desc := T(str(a["desc"]))
+		if not got:
+			desc += "  (%d/%d)" % [int(cur), int(a["target"])]
+		info.add_child(_label(desc, 13, MUTED))
+		h.add_child(info)
+		grid.add_child(card)

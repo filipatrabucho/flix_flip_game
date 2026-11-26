@@ -1,4 +1,4 @@
-# Fix & Flip Tech — v1.2
+# Fix & Flip Tech — v1.3
 
 Simulador de oficina de eletrónica em **Godot 4** (Forward+). Compra equipamentos avariados, repara-os passo a passo com as mãos (de luva) e ferramentas reais, e revende com lucro.
 
@@ -60,6 +60,22 @@ Os clientes entram pela porta da loja, fazem fila no balcão e esperam com um **
 - **Clientes calmos no início**: nos primeiros capítulos só há um trabalho de cada vez, e o cliente seguinte chega depois de entregares.
 - **Personagens mais realistas**: corpo com proporções humanas, joelhos e cotovelos, mãos com dedos, rosto com nariz, orelhas, íris colorida, pestanas e piscar de olhos, e roupa variada (camisa, hoodie, casaco).
 
+## Novidades v1.3 — A oficina cresce
+
+- **Expansão da loja (separador Equipa, tecla F)**:
+  1. *Anexo técnico* (900 €): abre a parede da direita e revela uma oficina com 2 bancadas para técnicos.
+  2. *Ampliação da loja* (2400 €): mais 2 bancadas, uma segunda prateleira «Prontos a entregar» (#5 a #8) e mais clientes.
+- **Funcionários**: há candidatos novos todas as manhãs.
+  - **Técnicos**: cada um tem a sua especialidade (computadores e consolas, telemóveis e portáteis de jogos, comandos, aparelhos antigos) e é mais rápido nela. Vês-los a trabalhar na bancada, com o equipamento e a percentagem do trabalho, e põem o equipamento pronto na prateleira. Ganham experiência e ficam mais rápidos. Os de mais estrelas fazem trabalhos de 5★ mais vezes.
+  - **Balconista**: atende o balcão, aceita pedidos, entrega os equipamentos prontos e guarda o dinheiro na caixa. Deixa para ti os clientes da história.
+  - Cada funcionário tem o seu **horário** (manhã 08–14, tarde 14–20, dia inteiro 09–18) e um **salário diário**, pago ao fechar a loja.
+  - Opção «Dar os trabalhos novos primeiro à equipa» (ou ficas tu com eles primeiro).
+- **Usados (Fix & Flip)**: todos os dias há 3 equipamentos avariados à venda. Compras, reparas (tu ou a equipa), pões na prateleira e aparece um comprador.
+- **Metas do dia (tecla M)**: 3 metas diárias com prémio em dinheiro, por exemplo «Entrega 3 equipamentos», «Recebe 2 avaliações de 5★» ou «Guarda 250 € na caixa».
+- **17 conquistas** com prémios: Faz-tudo, Lenda da vila, Pequena empresa, Dia perfeito, entre outras.
+- **Clientes VIP**: de vez em quando aparece um cliente que paga quase o dobro, mas tem pouco tempo.
+- Correção: no comando, os 2 parafusos de baixo estavam escondidos dentro das pegas.
+
 ## Novidades v1.2
 
 - **Pausa (Esc)** com Continuar, Guardar, **Definições no próprio jogo** (volumes de música e efeitos, sensibilidade, qualidade gráfica, idioma) e Sair para o menu.
@@ -88,6 +104,8 @@ Português e English: Definições → Idioma / Language.
 | P | Pedidos dos clientes |
 | L | Loja de peças |
 | U | Melhorias da oficina |
+| F | Equipa e expansão da loja |
+| M | Metas do dia e conquistas |
 | 1–5 / roda do rato | Escolher ferramenta |
 | Q | Mão livre |
 | TAB | Roda de ferramentas |
