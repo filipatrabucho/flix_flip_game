@@ -1720,6 +1720,7 @@ func _shelf_take(i: int) -> void:
 	o["status"] = "carried"
 	_start_carry(o)
 	_sfx("pickup")
+	_refresh_objective()
 
 
 ## Customer received their device: stats now, money goes on the counter.
@@ -1772,6 +1773,7 @@ func _spawn_cash(amount: float, near: Vector3) -> void:
 	var item := {"amount": amount, "node": n, "body": body}
 	body.set_meta("cash", item)
 	cash_items.append(item)
+	_refresh_objective()
 	_toast(T("O cliente deixou o dinheiro no balcão. Guarda-o na caixa (E)."), false, YELLOW)
 
 
@@ -1789,6 +1791,7 @@ func _collect_cash(item: Dictionary) -> void:
 	_sfx("cash")
 	_toast(T("+%s na caixa registadora!") % _eur(float(item["amount"])), false, GREEN)
 	_save_game()
+	_refresh_objective()
 
 
 func _exit_inspect_forced() -> void:
@@ -2887,6 +2890,19 @@ func _refresh_objective() -> void:
 	goal.custom_minimum_size = Vector2(250, 0)
 	objective_rows.add_child(goal)
 	objective_rows.add_child(HSeparator.new())
+	# delivery chores always shown first
+	if not carrying.is_empty():
+		objective_rows.add_child(_row(T("Leva o pedido #%d à prateleira «Prontos a entregar» ou ao cliente") % int(carrying["order"].get("number", 0)), "active"))
+	for o in orders:
+		if o.get("status", "") == "shelf" and customers.has(int(o["id"])):
+			objective_rows.add_child(_row(T("Entrega o pedido #%d a %s") % [int(o["number"]), o["customer"]], "active"))
+	if not cash_items.is_empty():
+		objective_rows.add_child(_row(T("Guarda o dinheiro do balcão na caixa registadora"), "active"))
+	if not parcels.is_empty():
+		objective_rows.add_child(_row(T("Abre a encomenda na receção (junto à porta)"), "active"))
+	for id in jobs.keys():
+		if jobs[id]["done"]:
+			objective_rows.add_child(_row(T("Pega no %s reparado e leva-o à prateleira") % _dev_name(id).to_lower(), "active"))
 	if not jobs.has(focus_job) or jobs[focus_job]["done"]:
 		focus_job = ""
 		for id in jobs.keys():
@@ -3310,6 +3326,7 @@ func _spawn_parcel(key: String, slot: int) -> void:
 	parcels.append(item)
 	_sfx("door_chime", 0.5)
 	_toast(T("Chegou uma encomenda à receção (junto à porta)!"), false, YELLOW)
+	_refresh_objective()
 
 
 func _open_parcel(item: Dictionary) -> void:
@@ -3323,6 +3340,7 @@ func _open_parcel(item: Dictionary) -> void:
 	t.tween_callback(n.queue_free)
 	_sfx("part", 0.7)
 	_toast(T("%s guardado no stock.") % T(Data.PARTS[key]["name"]), false, GREEN)
+	_refresh_objective()
 	if mode == "inspect":
 		_activate_step_targets()
 
