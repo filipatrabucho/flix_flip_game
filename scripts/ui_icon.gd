@@ -92,6 +92,13 @@ func _draw() -> void:
 				draw_colored_polygon(PackedVector2Array([o + Vector2(s * 0.27, s * 0.38), o + Vector2(s * 0.27, s * 0.24), o + Vector2(s * 0.36, s * 0.12), o + Vector2(s * 0.47, s * 0.1), o + Vector2(s * 0.47, s * 0.38)]), accent)
 			elif kind == "mouse_r":
 				draw_colored_polygon(PackedVector2Array([o + Vector2(s * 0.73, s * 0.38), o + Vector2(s * 0.73, s * 0.24), o + Vector2(s * 0.64, s * 0.12), o + Vector2(s * 0.53, s * 0.1), o + Vector2(s * 0.53, s * 0.38)]), accent)
+		"bolt":
+			draw_colored_polygon(PackedVector2Array([o + Vector2(s * 0.58, s * 0.02), o + Vector2(s * 0.18, s * 0.56), o + Vector2(s * 0.46, s * 0.56), o + Vector2(s * 0.36, s * 0.98), o + Vector2(s * 0.82, s * 0.4), o + Vector2(s * 0.52, s * 0.4)]), c)
+		"food":
+			var ctr := o + Vector2(s, s) * 0.5
+			draw_circle(ctr + Vector2(0, s * 0.08), s * 0.36, c)
+			draw_rect(Rect2(o + Vector2(s * 0.46, s * 0.04), Vector2(s * 0.08, s * 0.2)), Color("6b4423"))
+			draw_circle(o + Vector2(s * 0.66, s * 0.14), s * 0.1, Color("4caf50"))
 		"hand":
 			var ctr := o + Vector2(s, s) * 0.5
 			draw_circle(ctr + Vector2(0, s * 0.12), s * 0.26, c)

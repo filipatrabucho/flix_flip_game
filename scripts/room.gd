@@ -57,6 +57,7 @@ func build(parent: Node3D) -> Node3D:
 	_door()
 	_receiving()
 	_pickup_shelf()
+	_back_room()
 	return root
 
 
@@ -133,7 +134,11 @@ func _shell() -> void:
 	Kit.box(root, Vector3(1.1, 1.15, 0.1), wall, Vector3(1.8, 0.575, z))
 	Kit.box(root, Vector3(1.1, ROOM_H - 2.45, 0.1), wall, Vector3(1.8, 2.45 + (ROOM_H - 2.45) * 0.5, z))
 	# side + front walls
-	Kit.box(root, Vector3(0.1, ROOM_H, ROOM_FRONT - ROOM_BACK), wall, Vector3(-ROOM_X - 0.05, ROOM_H * 0.5, (ROOM_FRONT + ROOM_BACK) * 0.5))
+	# left wall with a doorway to the back room (z -1.15 .. -0.35)
+	var lx := -ROOM_X - 0.05
+	Kit.box(root, Vector3(0.1, ROOM_H, 0.6), wall, Vector3(lx, ROOM_H * 0.5, ROOM_BACK + 0.3))
+	Kit.box(root, Vector3(0.1, ROOM_H, ROOM_FRONT + 0.35), wall, Vector3(lx, ROOM_H * 0.5, -0.35 + (ROOM_FRONT + 0.35) * 0.5))
+	Kit.box(root, Vector3(0.1, ROOM_H - 2.1, 0.8), wall, Vector3(lx, 2.1 + (ROOM_H - 2.1) * 0.5, -0.75))
 	Kit.box(root, Vector3(0.1, ROOM_H, ROOM_FRONT - ROOM_BACK), wall, Vector3(ROOM_X + 0.05, ROOM_H * 0.5, (ROOM_FRONT + ROOM_BACK) * 0.5))
 	# front wall with the shop door (x 1.55..2.45, h 2.1)
 	var fz := ROOM_FRONT + 0.05
@@ -145,7 +150,7 @@ func _shell() -> void:
 	# skirting board
 	var skirt := Kit.mat(Color("1d2633"), 0.6)
 	Kit.box(root, Vector3(ROOM_X * 2.0, 0.08, 0.015), skirt, Vector3(0, 0.04, ROOM_BACK + 0.008))
-	Kit.box(root, Vector3(0.015, 0.08, ROOM_FRONT - ROOM_BACK), skirt, Vector3(-ROOM_X + 0.008, 0.04, (ROOM_FRONT + ROOM_BACK) * 0.5))
+	Kit.box(root, Vector3(0.015, 0.08, ROOM_FRONT + 0.35), skirt, Vector3(-ROOM_X + 0.008, 0.04, -0.35 + (ROOM_FRONT + 0.35) * 0.5))
 	Kit.box(root, Vector3(0.015, 0.08, ROOM_FRONT - ROOM_BACK), skirt, Vector3(ROOM_X - 0.008, 0.04, (ROOM_FRONT + ROOM_BACK) * 0.5))
 	# exposed conduit along the back wall
 	var conduit := Kit.mat(Color("6c7681"), 0.4, 0.8)
@@ -1010,3 +1015,93 @@ func make_parcel(label_text: String) -> Node3D:
 	l.position = Vector3(0, 0.08, 0.101)
 	n.add_child(l)
 	return n
+
+
+# -----------------------------------------------------------------------------
+# Back room: sleeping bag, fridge with snacks, kettle for coffee
+# -----------------------------------------------------------------------------
+const BACK_X0 := -4.65
+const BACK_X1 := -2.7
+const BACK_Z0 := ROOM_BACK
+const BACK_Z1 := 0.6
+var bed_pos := Vector3(-4.05, 0.0, -0.85)
+var fridge_pos := Vector3(-3.05, 0.0, -1.42)
+var kettle_pos := Vector3(-3.62, 0.0, -1.5)
+
+
+func _back_room() -> void:
+	var cx := (BACK_X0 + BACK_X1) * 0.5
+	var cz := (BACK_Z0 + BACK_Z1) * 0.5
+	var w := BACK_X1 - BACK_X0
+	var d := BACK_Z1 - BACK_Z0
+	var floor_m := Kit.pbr("walnut_pbr", 0.7, 0.0, Color("9c7a5c"), Vector3(1.5, 1.5, 1.5), true, 0.4)
+	Kit.box(root, Vector3(w, 0.1, d), floor_m, Vector3(cx, -0.05, cz))
+	var wall := Kit.pbr("wall_pbr", 0.85, 0.0, Color("c9a98a"), Vector3(0.7, 0.7, 0.7), true, 0.4)
+	Kit.box(root, Vector3(w, ROOM_H, 0.1), wall, Vector3(cx, ROOM_H * 0.5, BACK_Z0 - 0.05))
+	Kit.box(root, Vector3(w, ROOM_H, 0.1), wall, Vector3(cx, ROOM_H * 0.5, BACK_Z1 + 0.05))
+	Kit.box(root, Vector3(0.1, ROOM_H, d), wall, Vector3(BACK_X0 - 0.05, ROOM_H * 0.5, cz))
+	Kit.box(root, Vector3(w, 0.1, d), Kit.mat(Color("3b3430"), 0.9), Vector3(cx, ROOM_H + 0.05, cz))
+	# rug
+	Kit.slab(root, Vector3(1.3, 0.008, 0.9), 0.05, 0.003, Kit.fabric(Color("8e3b46"), 0.95, 0.6, 20.0), null, null, Vector3(-3.7, 0.004, -0.55))
+	# sleeping bag on a thin mattress + pillow
+	var bed := Node3D.new()
+	bed.position = bed_pos
+	root.add_child(bed)
+	Kit.slab(bed, Vector3(0.75, 0.08, 1.95), 0.08, 0.03, Kit.fabric(Color("5d6670"), 0.95, 0.5, 20.0), null, null, Vector3(0, 0.04, 0))
+	var bag := Kit.slab(bed, Vector3(0.68, 0.12, 1.5), 0.2, 0.05, Kit.fabric(Color("2f6b4f"), 0.9, 0.6, 20.0), null, null, Vector3(0, 0.12, 0.18))
+	bag.name = "SleepingBag"
+	Kit.box(bed, Vector3(0.01, 0.005, 1.4), Kit.chrome(Color("c5ccd3")), Vector3(0.3, 0.18, 0.18))
+	Kit.slab(bed, Vector3(0.5, 0.12, 0.3), 0.1, 0.05, Kit.fabric(Color("e9e4da"), 0.95, 0.4, 20.0), null, null, Vector3(0, 0.14, -0.78))
+	# fridge
+	var fr := Node3D.new()
+	fr.position = fridge_pos
+	root.add_child(fr)
+	var white := Kit.plastic(Color("eef0f2"), 0.3, 0.05)
+	Kit.slab(fr, Vector3(0.55, 0.85, 0.55), 0.03, 0.015, white, null, null, Vector3(0, 0.425, 0), Vector3(90, 0, 0))
+	Kit.box(fr, Vector3(0.53, 0.004, 0.01), Kit.mat(Color("9aa1a9"), 0.4), Vector3(0, 0.6, 0.276))
+	Kit.cyl(fr, 0.01, 0.2, Kit.chrome(), Vector3(-0.22, 0.42, 0.29))
+	for i in range(4):
+		Kit.cyl(fr, 0.018, 0.006, Kit.plastic([Color("e74c3c"), Color("f1c40f"), Color("3498db"), Color("2ecc71")][i], 0.4), Vector3(-0.1 + i * 0.07, 0.72 - (i % 2) * 0.05, 0.278), Vector3(90, 0, 0))
+	Kit.box(fr, Vector3(0.12, 0.16, 0.002), Kit.mat(Color("fdf6e3"), 0.7), Vector3(0.12, 0.35, 0.278))
+	# crate table with kettle, mugs and a jar of coffee
+	var kt := Node3D.new()
+	kt.position = kettle_pos
+	root.add_child(kt)
+	var crate := Kit.pbr("walnut_pbr", 0.7, 0.0, Color("c8a27a"), Vector3(2, 2, 2), true)
+	Kit.box(kt, Vector3(0.5, 0.45, 0.4), crate, Vector3(0, 0.225, 0))
+	Kit.cyl(kt, 0.07, 0.18, Kit.chrome(Color("c9ced4")), Vector3(-0.08, 0.54, 0), Vector3.ZERO, 0.06)
+	Kit.cyl(kt, 0.02, 0.02, Kit.plastic(Color("1b1b1b"), 0.4), Vector3(-0.08, 0.64, 0))
+	Kit.box(kt, Vector3(0.02, 0.08, 0.06), Kit.plastic(Color("1b1b1b"), 0.4), Vector3(-0.17, 0.55, 0))
+	Kit.cyl(kt, 0.04, 0.09, Kit.plastic(Color("f2efe9"), 0.3), Vector3(0.1, 0.495, 0.05))
+	Kit.cyl(kt, 0.05, 0.12, Kit.glass(Color(0.6, 0.4, 0.2), 0.1, 0.6), Vector3(0.12, 0.51, -0.1))
+	# floor lamp + warm light
+	Kit.cyl(root, 0.12, 0.02, Kit.mat(Color("2b2b2b"), 0.5, 0.5), Vector3(-4.4, 0.01, 0.3))
+	Kit.cyl(root, 0.012, 1.5, Kit.mat(Color("2b2b2b"), 0.5, 0.5), Vector3(-4.4, 0.76, 0.3))
+	Kit.cyl(root, 0.2, 0.26, Kit.fabric(Color("efe2c8"), 0.9), Vector3(-4.4, 1.6, 0.3), Vector3.ZERO, 0.12)
+	var l := OmniLight3D.new()
+	l.position = Vector3(-4.2, 1.6, 0.1)
+	l.light_color = Color("ffd59a")
+	l.light_energy = 1.6
+	l.omni_range = 3.5
+	l.shadow_enabled = true
+	root.add_child(l)
+	var l2 := OmniLight3D.new()
+	l2.position = Vector3(-3.3, 2.4, -0.6)
+	l2.light_color = Color("ffe2b8")
+	l2.light_energy = 0.8
+	l2.omni_range = 3.0
+	root.add_child(l2)
+	# door frame trim
+	var trim := Kit.mat(Color("2a2f36"), 0.5, 0.3)
+	Kit.box(root, Vector3(0.14, 2.12, 0.05), trim, Vector3(-ROOM_X - 0.05, 1.06, -1.17))
+	Kit.box(root, Vector3(0.14, 2.12, 0.05), trim, Vector3(-ROOM_X - 0.05, 1.06, -0.33))
+	Kit.box(root, Vector3(0.14, 0.05, 0.89), trim, Vector3(-ROOM_X - 0.05, 2.12, -0.75))
+	var sign := Label3D.new()
+	sign.text = I18n.t("SÓ PESSOAL")
+	sign.font_size = 40
+	sign.pixel_size = 0.0009
+	sign.modulate = Color("f2f5f8")
+	sign.outline_size = 6
+	sign.position = Vector3(-ROOM_X + 0.01, 2.3, -0.75)
+	sign.rotation_degrees = Vector3(0, 90, 0)
+	root.add_child(sign)

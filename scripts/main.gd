@@ -184,6 +184,12 @@ var pause_panel: PanelContainer
 var pause_main: VBoxContainer
 var pause_settings_box: VBoxContainer
 var current_slot := 1
+var stamina := 100.0
+var hunger := 100.0                    # 100 = full, 0 = starving
+var energy_bar: ProgressBar
+var hunger_bar: ProgressBar
+var tired_warned := false
+var coffee_body: StaticBody3D
 var fade: ColorRect
 var meter_panel: PanelContainer
 var board_root: Control
@@ -221,6 +227,9 @@ func _ready() -> void:
 	_build_shelf_targets()
 	var bell_body := Kit.static_body(self, Kit.sphere_shape(0.07), room.bell.global_position + Vector3(0, 0.03, 0), "bell")
 	bell_body.collision_layer = 1
+	for t in [["bed", room.bed_pos + Vector3(0, 0.15, 0), Vector3(0.8, 0.35, 2.0)], ["fridge", room.fridge_pos + Vector3(0, 0.45, 0), Vector3(0.6, 0.9, 0.6)], ["kettle", room.kettle_pos + Vector3(0, 0.55, 0), Vector3(0.5, 0.3, 0.4)]]:
+		var tb := Kit.static_body(self, Kit.box_shape(t[2]), t[1], t[0])
+		tb.collision_layer = 1
 	_build_ui()
 	_apply_settings()
 	_show_menu()
@@ -485,7 +494,11 @@ func _freeze_viewport_later(vp: SubViewport) -> void:
 # =============================================================================
 func _process(delta: float) -> void:
 	if mode in ["walk", "inspect", "wheel"]:
-		minutes += delta * (1.0 if mode != "wheel" else 0.25)
+		var dm := delta * (1.0 if mode != "wheel" else 0.25)
+		minutes += dm
+		hunger = maxf(0.0, hunger - dm * 0.09)
+		stamina = maxf(0.0, stamina - dm * 0.035 * (2.5 if hunger <= 0.0 else (1.6 if hunger < 25.0 else 1.0)))
+		_update_fatigue()
 		if minutes >= 20 * 60:
 			_end_of_day()
 		elif mode != "wheel":
@@ -617,27 +630,30 @@ func _walk_move(delta: float) -> void:
 		dir = dir.normalized().rotated(Vector3.UP, walk_yaw)
 		var speed := 2.2 if Input.is_key_pressed(KEY_SHIFT) else 1.4
 		var p := cam.position + dir * speed * delta
-		p.x = clampf(p.x, -2.3, 2.3)
-		p.z = clampf(p.z, -0.62, 2.3)
-		# keep out of the furniture either side of the bench
-		if p.z < -0.75 and absf(p.x) > 1.1:
-			p.z = -0.75
-		# the shop counter (x -0.6..1.6, z 1.2..1.9): stay on the workshop side
-		if p.x > -0.65 and p.x < 1.65 and p.z > 1.0 and p.z < 1.95:
-			if cam.position.z <= 1.0:
-				p.z = 1.0
-			elif cam.position.x <= -0.65:
-				p.x = -0.65
-			elif cam.position.x >= 1.65:
-				p.x = 1.65
+		var o := cam.position
+		if not _walk_ok(p):
+			if _walk_ok(Vector3(p.x, o.y, o.z)):
+				p = Vector3(p.x, o.y, o.z)
+			elif _walk_ok(Vector3(o.x, o.y, p.z)):
+				p = Vector3(o.x, o.y, p.z)
 			else:
-				p.z = 1.95
+				p = o
 		p.y = EYE_H + sin(Time.get_ticks_msec() * 0.009) * 0.006
 		step_accum += cam.position.distance_to(p)
 		if step_accum > 0.62:
 			step_accum = 0.0
 			_sfx("step", 0.5)
 		cam.position = p
+
+
+## Walkable areas: shop floor (minus the counter), doorway, back room.
+func _walk_ok(p: Vector3) -> bool:
+	var in_main := p.x >= -2.3 and p.x <= 2.3 and p.z <= 2.3 and (p.z >= -0.62 or (p.x < -2.0 and p.z >= -1.05))
+	if in_main and p.x > -0.65 and p.x < 1.65 and p.z > 1.0 and p.z < 1.95:
+		in_main = false
+	var in_door := p.x >= -2.98 and p.x <= -2.2 and p.z >= -1.05 and p.z <= -0.45
+	var in_back := p.x >= -4.45 and p.x <= -2.88 and p.z >= -1.55 and p.z <= 0.42
+	return in_main or in_door or in_back
 
 
 func _ray(from: Vector3, to: Vector3, mask: int) -> Dictionary:
@@ -664,6 +680,9 @@ func _walk_hover() -> void:
 		elif t == "bell":
 			pick = "bell"
 			where = hit.collider.global_position + Vector3(0, 0.08, 0)
+		elif t in ["bed", "fridge", "kettle", "coffee_machine"]:
+			pick = t
+			where = hit.collider.global_position + Vector3(0, 0.35, 0)
 		elif t.begins_with("shelf:") or t == "cash" or t.begins_with("parcel"):
 			pick = t
 			where = hit.collider.global_position + Vector3(0, 0.12, 0)
@@ -704,6 +723,18 @@ func _walk_hover() -> void:
 		return
 	if pick == "bell":
 		_show_prompt("E", T("Tocar a campainha"), where)
+		return
+	if pick == "bed":
+		_show_prompt("E", T("Fechar a loja e dormir"), where)
+		return
+	if pick == "fridge":
+		_show_prompt("E", T("Comer um snack (%s)") % _eur(3.0), where)
+		return
+	if pick == "kettle":
+		_show_prompt("E", T("Fazer um café (%s)") % _eur(1.0), where)
+		return
+	if pick == "coffee_machine":
+		_show_prompt("E", T("Tirar um café"), where)
 		return
 	if pick == "cash":
 		_show_prompt("E", T("Guardar %s na caixa") % _eur(float(hovered_cash.get("amount", 0.0))), where)
@@ -752,6 +783,9 @@ func _interact_walk() -> void:
 			_shelf_place(si)
 		elif carrying.is_empty() and shelf_items[si] != null:
 			_shelf_take(si)
+		return
+	if hovered_pick in ["bed", "fridge", "kettle", "coffee_machine"]:
+		_use_comfort(hovered_pick)
 		return
 	if hovered_pick == "bell":
 		room.ring_bell()
@@ -999,6 +1033,10 @@ func _inspect_click() -> void:
 		_toast(T("Precisas de: %s") % need, true)
 		_flash_needed_slot(allowed)
 		return
+	if stamina <= 0.5:
+		_toast(T("Estás exausto! Bebe um café ou vai dormir no quarto das traseiras."), true)
+		return
+	stamina = maxf(0.0, stamina - 1.6)
 	var target := hovered_target
 	d.set_hover("")
 	var dur := _perform(id, str(step["act"]), target) / DeviceBase.anim_speed
@@ -1836,6 +1874,7 @@ func _end_of_day() -> void:
 		[T("Equipamentos reparados (total):  %d") % repaired, MUTED],
 		[T("Reputação:  %.1f ★") % _reputation(), YELLOW],
 	]
+	stamina = maxf(stamina, 80.0)
 	var rent_today := rent_due_day > 0 and finished_day >= rent_due_day
 	if rent_today:
 		lines.append([T("Renda a pagar hoje:  %s") % _eur(float(rent_amount)), Color("ffcf6b")])
@@ -2308,7 +2347,7 @@ func _save_game() -> void:
 	for pc in parcels:
 		inv_save[pc["key"]] = int(inv_save.get(pc["key"], 0)) + 1
 	f.store_string(JSON.stringify({"day": day, "minutes": minutes, "money": money + pending_cash, "xp": xp, "level": level, "repaired": repaired, "ratings": ratings, "inventory": inv_save,
-		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount, "upgrades": upgrades}))
+		"story_chapter": story_chapter, "story_deliveries": story_deliveries, "story_flags": story_flags, "rent_due_day": rent_due_day, "rent_amount": rent_amount, "upgrades": upgrades, "stamina": stamina, "hunger": hunger}))
 
 
 func _has_save() -> bool:
@@ -2359,6 +2398,8 @@ func _load_game() -> bool:
 	story_flags = data.get("story_flags", {})
 	rent_due_day = int(data.get("rent_due_day", 0))
 	rent_amount = int(data.get("rent_amount", Story.RENT))
+	stamina = float(data.get("stamina", 100.0))
+	hunger = float(data.get("hunger", 100.0))
 	upgrades = {}
 	var up = data.get("upgrades", {})
 	if up is Dictionary:
@@ -2532,6 +2573,34 @@ func _build_hud(base: Control) -> void:
 	var time_pill := _pill_with_icon("clock")
 	time_label = time_pill.get_meta("label")
 	tl.add_child(time_pill)
+	var needs := _panel(PANEL_BG, 10, Vector4(12, 6, 14, 6))
+	var nv := VBoxContainer.new()
+	nv.add_theme_constant_override("separation", 3)
+	needs.add_child(nv)
+	for nd in [["bolt", Color("f5d142")], ["food", Color("ff8a5c")]]:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		row.add_child(_icon(nd[0], 14, nd[1]))
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(90, 7)
+		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var bgs := StyleBoxFlat.new()
+		bgs.bg_color = Color(1, 1, 1, 0.12)
+		bgs.set_corner_radius_all(3)
+		var fgs := StyleBoxFlat.new()
+		fgs.bg_color = nd[1]
+		fgs.set_corner_radius_all(3)
+		bar.add_theme_stylebox_override("background", bgs)
+		bar.add_theme_stylebox_override("fill", fgs)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(bar)
+		nv.add_child(row)
+		if nd[0] == "bolt":
+			energy_bar = bar
+		else:
+			hunger_bar = bar
+	tl.add_child(needs)
 
 	# top-right: money, level, xp
 	var tr := HBoxContainer.new()
@@ -2871,6 +2940,9 @@ func _update_hud_values() -> void:
 	level_label.text = str(level)
 	xp_label.text = T("%d / 100 XP") % xp
 	xp_bar.value = xp
+	if energy_bar:
+		energy_bar.value = stamina
+		hunger_bar.value = hunger
 
 
 func _eur(v: float) -> String:
@@ -3280,10 +3352,80 @@ func _fill_shop() -> void:
 		grid.add_child(card)
 
 
+func _base_speed() -> float:
+	return (1.35 if upgrades.has("screwdriver") else 1.0) * (1.1 if upgrades.has("lamp") else 1.0)
+
+
+func _use_comfort(what: String) -> void:
+	match what:
+		"fridge":
+			if money < 3.0:
+				_toast(T("Dinheiro insuficiente."), true)
+				return
+			money -= 3.0
+			day_profit -= 3.0
+			hunger = minf(100.0, hunger + 40.0)
+			stamina = minf(100.0, stamina + 5.0)
+			minutes += 10.0
+			_sfx("part", 0.5)
+			_toast(T("Que bom! Uma sandes e um sumo. (fome +40)"), false, GREEN)
+		"kettle", "coffee_machine":
+			var cost := 0.0 if what == "coffee_machine" else 1.0
+			if money < cost:
+				_toast(T("Dinheiro insuficiente."), true)
+				return
+			money -= cost
+			day_profit -= cost
+			var gain := 45.0 if what == "coffee_machine" else 35.0
+			stamina = minf(100.0, stamina + gain)
+			minutes += 5.0
+			_sfx("pickup", 0.6)
+			_toast(T("Café quentinho! (energia +%d)") % int(gain), false, GREEN)
+		"bed":
+			if not carrying.is_empty():
+				_toast(T("Pousa primeiro o que tens nas mãos."), true)
+				return
+			if minutes < 17 * 60:
+				_open_popup(T("Fechar a loja mais cedo?"), [
+					[T("Ainda é cedo. Se dormires agora, o dia acaba e os clientes à espera vão-se embora."), TEXT],
+				], [[T("Fechar e dormir"), func() -> void:
+					_close_popup()
+					_go_to_sleep()], [T("Continuar a trabalhar"), _close_popup]], true)
+			else:
+				_go_to_sleep()
+
+
+func _go_to_sleep() -> void:
+	var tw := create_tween()
+	tw.tween_property(fade, "color:a", 1.0, 0.6)
+	tw.tween_callback(func() -> void:
+		stamina = 100.0
+		hunger = maxf(30.0, hunger - 15.0)
+		minutes = maxf(minutes, 20 * 60 - 1)
+		_end_of_day()
+		_toast(T("Dormiste como uma pedra. Energia no máximo!"), false, GREEN))
+	tw.tween_property(fade, "color:a", 0.0, 0.8)
+
+
+func _update_fatigue() -> void:
+	DeviceBase.anim_speed = _base_speed() * (0.7 if stamina < 25.0 else 1.0)
+	if stamina < 25.0 and not tired_warned:
+		tired_warned = true
+		_toast(T("Estás cansado: trabalhas mais devagar. Bebe um café ou vai descansar."), true)
+	elif stamina >= 30.0:
+		tired_warned = false
+
+
 func _apply_upgrades() -> void:
-	DeviceBase.anim_speed = (1.35 if upgrades.has("screwdriver") else 1.0) * (1.1 if upgrades.has("lamp") else 1.0)
+	DeviceBase.anim_speed = _base_speed()
 	for id in upgrades.keys():
 		room.add_upgrade(id)
+	if upgrades.has("coffee") and (coffee_body == null or not is_instance_valid(coffee_body)):
+		coffee_body = Kit.static_body(self, Kit.box_shape(Vector3(0.22, 0.32, 0.26)), Vector3(1.0, Room.COUNTER_TOP + 0.15, Room.COUNTER_Z - 0.18), "coffee_machine")
+		coffee_body.collision_layer = 1
+	elif not upgrades.has("coffee") and coffee_body and is_instance_valid(coffee_body):
+		coffee_body.queue_free()
+		coffee_body = null
 
 
 func _buy_upgrade(key: String) -> void:
@@ -3998,6 +4140,8 @@ func _new_game() -> void:
 	rent_due_day = 0
 	rent_amount = Story.RENT
 	upgrades = {}
+	stamina = 100.0
+	hunger = 100.0
 	room.clear_upgrades()
 	_apply_upgrades()
 	_reset_jobs()
