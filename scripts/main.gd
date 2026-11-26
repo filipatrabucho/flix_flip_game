@@ -1983,7 +1983,7 @@ func _talk_to_customer(c: Node3D) -> void:
 		var pay := _order_payment(o)
 		var stars: int = pay["stars"]
 		var tip: float = pay["tip"]
-		var star_txt := "★".repeat(stars) + "☆".repeat(5 - stars)
+		var star_txt := "%s  (%d/5)" % ["★".repeat(stars), stars]
 		var after_scene := ""
 		if story_key != "":
 			after_scene = Story.STORY_ORDERS[story_key]["deliver"]
